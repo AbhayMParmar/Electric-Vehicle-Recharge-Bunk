@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EV Charging - Login</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+    <style>
+        /* All CSS remains exactly the same */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #00a884 0%, #008f75 100%);
+            min-height: 100vh;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .login-container {
+            width: 100%;
+            max-width: 900px;
+            margin: 30px auto;
+            padding: 20px 0;
+        }
+
+        .login-wrapper {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+            overflow: hidden;
+        }
+
+        .login-card {
+            display: flex;
+            min-height: 600px;
+        }
+
+        /* Form Section Styles */
+        .form-section {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 40px;
+        }
+
+        .login-form {
+            width: 100%;
+            max-width: 350px;
+        }
+
+        .login-form h2 {
+            font-size: 24px;
+            color: #333;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+
+        .login-form p {
+            color: #666;
+            margin-bottom: 25px;
+            font-size: 14px;
+        }
+
+        .form-group {
+            margin-bottom: 18px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 6px;
+            color: #555;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.2s;
+            background: #fafafa;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #00a884;
+            background: white;
+            box-shadow: 0 0 0 3px rgba(0, 168, 132, 0.1);
+        }
+
+        .forgot-password {
+            text-align: right;
+            margin-top: 5px;
+        }
+
+        .forgot-password a {
+            color: #666;
+            text-decoration: none;
+            font-size: 13px;
+        }
+
+        .forgot-password a:hover {
+            color: #00a884;
+            text-decoration: underline;
+        }
+
+        .btn-login {
+            width: 100%;
+            padding: 13px;
+            background: #00a884;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-top: 10px;
+            box-shadow: 0 4px 12px rgba(0, 168, 132, 0.3);
+        }
+
+        .btn-login:hover {
+            background: #008f75;
+            box-shadow: 0 6px 16px rgba(0, 168, 132, 0.4);
+            transform: translateY(-2px);
+        }
+
+        .btn-login:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 8px rgba(0, 168, 132, 0.3);
+        }
+
+        .btn-login:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        .btn-login.loading {
+            position: relative;
+            color: transparent;
+        }
+
+        .btn-login.loading::after {
+            content: '';
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            top: 50%;
+            left: 50%;
+            margin: -10px 0 0 -10px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .register-link {
+            text-align: center;
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+        }
+
+        .register-link p {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .register-link a {
+            color: #00a884;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .register-link a:hover {
+            text-decoration: underline;
+        }
+
+        .message {
+            padding: 10px 14px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-size: 13px;
+            display: none;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .message.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+            display: block;
+        }
+
+        .message.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+            display: block;
+        }
+
+        .error-details {
+            font-size: 11px;
+            margin-top: 4px;
+            opacity: 0.8;
+        }
+
+        .success-popup {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s;
+        }
+
+        .success-popup.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .success-popup-content {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            text-align: center;
+            max-width: 320px;
+            width: 90%;
+            transform: scale(0.9);
+            transition: transform 0.3s;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        }
+
+        .success-popup.active .success-popup-content {
+            transform: scale(1);
+        }
+
+        .success-popup-icon {
+            font-size: 45px;
+            color: #00a884;
+            margin-bottom: 12px;
+        }
+
+        .success-popup h3 {
+            color: #333;
+            margin-bottom: 8px;
+            font-size: 18px;
+        }
+
+        .success-popup p {
+            color: #666;
+            margin-bottom: 15px;
+            font-size: 13px;
+        }
+
+        .success-loader {
+            width: 35px;
+            height: 35px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #00a884;
+            border-radius: 50%;
+            margin: 12px auto;
+            animation: spin 1s linear infinite;
+        }
+
+        .retry-timer {
+            font-size: 11px;
+            color: #666;
+            margin-top: 8px;
+            text-align: center;
+            display: none;
+        }
+
+        /* Illustration Section Styles */
+        .illustration-section {
+            flex: 1;
+            background: linear-gradient(135deg, #00a884 0%, #008f75 100%);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 40px;
+            color: white;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .illustration-section::before {
+            content: '';
+            position: absolute;
+            width: 200px;
+            height: 200px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            top: -100px;
+            left: -100px;
+        }
+
+        .illustration-section::after {
+            content: '';
+            position: absolute;
+            width: 150px;
+            height: 150px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 50%;
+            bottom: -75px;
+            right: -75px;
+        }
+
+        .logo {
+            position: absolute;
+            top: 20px;
+            right: 30px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .logo h1 {
+            color: white;
+            font-size: 22px;
+            font-weight: 600;
+        }
+
+        .illustration-content {
+            max-width: 400px;
+            z-index: 1;
+            text-align: center;
+        }
+
+        .illustration-content h2 {
+            font-size: 28px;
+            margin-bottom: 15px;
+            font-weight: 600;
+            line-height: 1.3;
+        }
+
+        .illustration-content p {
+            font-size: 16px;
+            opacity: 0.9;
+            line-height: 1.6;
+            margin-bottom: 25px;
+        }
+
+        .features {
+            margin-top: 30px;
+            text-align: left;
+            width: 100%;
+            max-width: 300px;
+        }
+
+        .feature-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 15px;
+        }
+
+        .feature-icon {
+            width: 22px;
+            height: 22px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            flex-shrink: 0;
+        }
+
+        .feature-text {
+            font-size: 15px;
+            opacity: 0.9;
+        }
+
+        .btn-signin {
+            margin-top: 25px;
+            padding: 12px 30px;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .btn-signin:hover {
+            background: rgba(255, 255, 255, 0.3);
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+            transform: translateY(-2px);
+        }
+
+        .btn-signin:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        @media (max-width: 768px) {
+            .login-card {
+                flex-direction: column;
+                min-height: auto;
+            }
+            
+            .illustration-section {
+                padding: 30px 20px;
+                min-height: 250px;
+                order: 2;
+            }
+            
+            .form-section {
+                padding: 30px 20px;
+                order: 1;
+            }
+            
+            .illustration-content h2 {
+                font-size: 24px;
+            }
+            
+            .illustration-content p {
+                font-size: 14px;
+            }
+            
+            .logo {
+                top: 15px;
+                right: 20px;
+            }
+            
+            .features {
+                max-width: 250px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .login-container {
+                margin: 10px auto;
+                padding: 10px 0;
+            }
+            
+            body {
+                padding: 10px;
+            }
+        }
+    </style>
+    <script>
+        class AuthManager {
+            constructor() {
+                this.failedAttempts = 0;
+                this.maxAttempts = 5;
+                this.init();
+            }
+
+            init() {
+                // Initialize Firebase
+                const firebaseConfig = {
+                    apiKey: "AIzaSyCwlOYb-GNV7kBqX_Bo58OTN1FlINqGhao",
+                    authDomain: "electric-vehicle-recharg-bee81.firebaseapp.com",
+                    projectId: "electric-vehicle-recharg-bee81",
+                    storageBucket: "electric-vehicle-recharg-bee81.firebasestorage.app",
+                    messagingSenderId: "320394409518",
+                    appId: "1:320394409518:web:42142d9e41200b976091bf",
+                    measurementId: "G-DZEKDPXZVT"
+                };
+
+                try {
+                    if (!firebase.apps.length) {
+                        firebase.initializeApp(firebaseConfig);
+                    }
+                    
+                    this.auth = firebase.auth();
+                    this.db = firebase.firestore();
+                    this.setupEventListeners();
+                } catch (error) {
+                    console.error('Firebase initialization error:', error);
+                    this.showMessage('Firebase initialization failed. Please refresh the page.', 'error');
+                }
+            }
+
+            setupEventListeners() {
+                // Login Form
+                const loginForm = document.getElementById('loginForm');
+                if (loginForm) {
+                    loginForm.addEventListener('submit', (e) => this.handleLogin(e));
+                }
+
+                // Reset password link
+                const resetLink = document.getElementById('resetPassword');
+                if (resetLink) {
+                    resetLink.addEventListener('click', (e) => this.handleResetPassword(e));
+                }
+
+                // Sign In button in illustration
+                const signInBtn = document.getElementById('signInBtn');
+                if (signInBtn) {
+                    signInBtn.addEventListener('click', () => {
+                        window.location.href = 'register.html';
+                    });
+                }
+            }
+
+            async handleLogin(e) {
+                e.preventDefault();
+
+                const email = document.getElementById('email').value.trim();
+                const password = document.getElementById('password').value;
+
+                // Basic validation
+                if (!email || !password) {
+                    this.showMessage('Please enter both email and password', 'error');
+                    return;
+                }
+
+                // Check for hardcoded admin credentials
+                const adminCredentials = this.getAdminCredentials();
+                let isAdmin = false;
+                
+                for (const admin of adminCredentials) {
+                    if (email === admin.email && password === admin.password) {
+                        isAdmin = true;
+                        break;
+                    }
+                }
+
+                // Show loading state
+                const submitBtn = e.target.querySelector('button[type="submit"]');
+                submitBtn.classList.add('loading');
+                submitBtn.disabled = true;
+                
+                if (isAdmin) {
+                    // Admin login - redirect directly to admin panel
+                    sessionStorage.setItem('userEmail', email);
+                    sessionStorage.setItem('userId', 'admin_' + Date.now());
+                    sessionStorage.setItem('isAdmin', 'true');
+                    
+                    // Show success popup
+                    this.showSuccessPopup();
+                    
+                    // Redirect to admin panel after 1.5 seconds
+                    setTimeout(() => {
+                        window.location.href = 'admin-panel.html';
+                    }, 1500);
+                    
+                } else {
+                    // Regular user login with Firebase
+                    try {
+                        const userCredential = await this.auth.signInWithEmailAndPassword(email, password);
+                        const user = userCredential.user;
+                        
+                        // Reset failed attempts on success
+                        this.failedAttempts = 0;
+                        
+                        // Set session storage
+                        sessionStorage.setItem('userEmail', user.email);
+                        sessionStorage.setItem('userId', user.uid);
+                        sessionStorage.setItem('isAdmin', 'false');
+                        
+                        // Update last login time in Firestore
+                        try {
+                            await this.db.collection('users').doc(user.uid).update({
+                                lastLogin: new Date().toISOString()
+                            });
+                        } catch (dbError) {
+                            console.warn('Firestore update error:', dbError);
+                        }
+                        
+                        // Show success popup
+                        this.showSuccessPopup();
+                        
+                        // Redirect to userpanel after 1.5 seconds
+                        setTimeout(() => {
+                            window.location.href = 'userpanel.html';
+                        }, 1500);
+                        
+                    } catch (error) {
+                        console.error('Login error:', error);
+                        
+                        let errorMessage = 'Login failed. Please try again.';
+                        let errorDetails = '';
+                        
+                        if (error.code === 'auth/user-not-found') {
+                            errorMessage = 'No account found with this email.';
+                            errorDetails = 'Please use a registered email address.';
+                        } else if (error.code === 'auth/wrong-password') {
+                            errorMessage = 'Incorrect password.';
+                            errorDetails = 'Please check your password or click "Forgot Password" to reset.';
+                            this.failedAttempts++;
+                        } else if (error.code === 'auth/invalid-email') {
+                            errorMessage = 'Invalid email address format.';
+                            errorDetails = 'Please enter a valid email address.';
+                        } else if (error.code === 'auth/user-disabled') {
+                            errorMessage = 'This account has been disabled.';
+                            errorDetails = 'Please contact support for assistance.';
+                        } else if (error.code === 'auth/too-many-requests') {
+                            errorMessage = 'Too many failed login attempts.';
+                            errorDetails = 'Please wait a few minutes before trying again.';
+                        } else if (error.code === 'auth/network-request-failed') {
+                            errorMessage = 'Network error.';
+                            errorDetails = 'Please check your internet connection and try again.';
+                        }
+                        
+                        this.showMessage(errorMessage, 'error', errorDetails);
+                        
+                        // Reset button state
+                        submitBtn.classList.remove('loading');
+                        submitBtn.disabled = false;
+                    }
+                }
+            }
+
+            getAdminCredentials() {
+                // Hardcoded admin credentials
+                return [
+                    {
+                        email: "admin@evcharge.com",
+                        password: "Admin@123"
+                    },
+                    {
+                        email: "admin@gmail.com",
+                        password: "admin123"
+                    }
+                ];
+            }
+
+            async handleResetPassword(e) {
+                e.preventDefault();
+                const email = document.getElementById('email').value.trim();
+                
+                if (!email) {
+                    this.showMessage('Please enter your email address to reset password', 'error');
+                    return;
+                }
+                
+                try {
+                    await this.auth.sendPasswordResetEmail(email);
+                    this.showMessage('Password reset email sent. Check your inbox.', 'success');
+                } catch (error) {
+                    this.showMessage('Failed to send reset email. Please try again.', 'error');
+                }
+            }
+
+            showSuccessPopup() {
+                const popup = document.getElementById('successPopup');
+                if (popup) {
+                    popup.classList.add('active');
+                }
+            }
+
+            showMessage(message, type, details = '') {
+                const messageDiv = document.getElementById('message');
+                if (messageDiv) {
+                    messageDiv.innerHTML = message + (details ? `<div class="error-details">${details}</div>` : '');
+                    messageDiv.className = `message ${type}`;
+                    
+                    // Clear previous timer
+                    if (this.messageTimeout) {
+                        clearTimeout(this.messageTimeout);
+                    }
+                    
+                    // Auto-hide after 5 seconds for non-error messages
+                    if (type !== 'error') {
+                        this.messageTimeout = setTimeout(() => {
+                            messageDiv.textContent = '';
+                            messageDiv.className = 'message';
+                            messageDiv.style.display = 'none';
+                        }, 5000);
+                    }
+                }
+            }
+        }
+
+        // Initialize when DOM is loaded
+        document.addEventListener('DOMContentLoaded', () => {
+            window.authManager = new AuthManager();
+        });
+    </script>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-wrapper">
+            <div class="login-card">
+                <!-- Left Section with Login Form -->
+                <div class="form-section">
+                    <div class="login-form">
+                        <h2>Welcome Back</h2>
+                        <p>Sign in to your EVCharge account</p>
+                        
+                        <form id="loginForm">
+                            <div id="message" class="message"></div>
+                            
+                            <div class="form-group">
+                                <label for="email">Email Address</label>
+                                <input type="email" id="email" required placeholder="Enter your registered email">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="password">Password</label>
+                                <input type="password" id="password" required placeholder="Enter your password">
+                                <div class="forgot-password">
+                                    <a href="#" id="resetPassword">Forgot Password?</a>
+                                </div>
+                            </div>
+                            
+                            <button type="submit" class="btn-login">Login</button>
+                            
+                            <div id="retryTimer" class="retry-timer"></div>
+                            
+                            <div class="register-link">
+                                <p>Don't have an account? <a href="register.html">Create account</a></p>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Right Section with Illustration -->
+                <div class="illustration-section">
+                    <div class="logo">
+                        <h1>EVCharge</h1>
+                    </div>
+                    
+                    <div class="illustration-content">
+                        <h2>Sign In</h2>
+                        <p>Begin your amazing journey by creating<br>an account with us today</p>
+
+                        <button class="btn-signin" id="signInBtn">
+                            Create Account →
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Success Popup -->
+    <div id="successPopup" class="success-popup">
+        <div class="success-popup-content">
+            <div class="success-popup-icon">
+                ✓
+            </div>
+            <h3>Login Successful!</h3>
+            <p>You are being redirected to your dashboard...</p>
+            <div class="success-loader"></div>
+        </div>
+    </div>
+</body>
+</html>

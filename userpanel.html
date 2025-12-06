@@ -1,0 +1,4194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Dashboard - EV Charging</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-storage.js"></script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCwlOYb-GNV7kBqX_Bo58OTN1FlINqGhao&libraries=places"></script>
+    <style>
+        /* User Panel Styles */
+        :root {
+            --primary-color: #00a884;
+            --secondary-color: #2d3748;
+            --accent-color: #3182ce;
+            --light-color: #f7fafc;
+            --dark-color: #1a202c;
+            --danger-color: #e53e3e;
+            --success-color: #38a169;
+            --warning-color: #d69e2e;
+            --info-color: #4299e1;
+            --shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.1);
+            --radius: 8px;
+            --radius-sm: 4px;
+            --transition: all 0.3s ease;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: var(--dark-color);
+            background-color: var(--light-color);
+        }
+
+        .user-container {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        /* Header - Enhanced Design */
+        .user-header {
+            background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+            box-shadow: var(--shadow);
+            padding: 0 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            height: 70px;
+            border-bottom: 2px solid var(--primary-color);
+        }
+
+        .logo h1 {
+            color: var(--primary-color);
+            font-size: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        /* Enhanced Navigation */
+        .user-nav {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+        }
+
+        .nav-links {
+            display: flex;
+            list-style: none;
+            gap: 0.5rem;
+            margin-right: 1rem;
+        }
+
+        .nav-links a {
+            text-decoration: none;
+            color: var(--secondary-color);
+            font-weight: 500;
+            padding: 0.75rem 1rem;
+            border-radius: var(--radius-sm);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: var(--transition);
+            position: relative;
+            border: 1px solid transparent;
+        }
+
+        .nav-links a:hover,
+        .nav-links a.active {
+            color: var(--primary-color);
+            background-color: rgba(0, 168, 132, 0.08);
+            border-color: rgba(0, 168, 132, 0.2);
+        }
+
+        .nav-links a i {
+            font-size: 1.1rem;
+            width: 20px;
+            text-align: center;
+        }
+
+        /* Enhanced User Controls */
+        .user-controls {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            position: relative;
+        }
+
+        .user-profile-container {
+            position: relative;
+        }
+
+        .user-profile-toggle {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.5rem 1rem;
+            background-color: white;
+            border: 1px solid #e2e8f0;
+            border-radius: var(--radius);
+            cursor: pointer;
+            transition: var(--transition);
+            min-width: 180px;
+        }
+
+        .user-profile-toggle:hover {
+            border-color: var(--primary-color);
+            box-shadow: var(--shadow);
+        }
+
+        .user-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary-color) 0%, #008f75 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            font-size: 1.1rem;
+            border: 2px solid white;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .user-details {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .user-name {
+            font-weight: 600;
+            color: var(--dark-color);
+            font-size: 0.9rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .user-email {
+            font-size: 0.8rem;
+            color: #718096;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .dropdown-arrow {
+            color: #718096;
+            transition: var(--transition);
+        }
+
+        .user-profile-toggle.active .dropdown-arrow {
+            transform: rotate(180deg);
+            color: var(--primary-color);
+        }
+
+        /* User Dropdown Menu */
+        .user-dropdown {
+            position: absolute;
+            top: calc(100% + 5px);
+            right: 0;
+            background-color: white;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow-lg);
+            min-width: 220px;
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(-10px);
+            transition: var(--transition);
+            border: 1px solid #e2e8f0;
+        }
+
+        .user-dropdown.active {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+
+        .dropdown-header {
+            padding: 1rem;
+            border-bottom: 1px solid #e2e8f0;
+            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+        }
+
+        .dropdown-header .user-name {
+            font-size: 1rem;
+            color: var(--dark-color);
+        }
+
+        .dropdown-header .user-email {
+            font-size: 0.85rem;
+        }
+
+        .dropdown-menu {
+            list-style: none;
+            padding: 0.5rem 0;
+        }
+
+        .dropdown-menu li a {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem 1.5rem;
+            text-decoration: none;
+            color: var(--secondary-color);
+            transition: var(--transition);
+        }
+
+        .dropdown-menu li a:hover {
+            background-color: rgba(0, 168, 132, 0.08);
+            color: var(--primary-color);
+        }
+
+        .dropdown-menu li a i {
+            width: 18px;
+            color: #718096;
+        }
+
+        .dropdown-menu li a:hover i {
+            color: var(--primary-color);
+        }
+
+        .dropdown-divider {
+            height: 1px;
+            background-color: #e2e8f0;
+            margin: 0.5rem 0;
+        }
+
+        .logout-btn {
+            padding: 0.75rem 1.5rem;
+            background-color: var(--danger-color);
+            color: white;
+            border: none;
+            border-radius: var(--radius);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-weight: 500;
+            transition: var(--transition);
+            white-space: nowrap;
+        }
+
+        .logout-btn:hover {
+            background-color: #c53030;
+            transform: translateY(-1px);
+            box-shadow: var(--shadow);
+        }
+
+        .menu-toggle {
+            display: none;
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            color: var(--secondary-color);
+            cursor: pointer;
+            padding: 0.5rem;
+        }
+
+        /* Main Content */
+        .user-main {
+            flex: 1;
+            padding: 2rem;
+            max-width: 1400px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        /* Loading Overlay */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(255, 255, 255, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            gap: 1rem;
+        }
+
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Error Message */
+        .error-message {
+            background-color: #fed7d7;
+            border: 1px solid #fc8181;
+            color: #742a2a;
+            padding: 1rem;
+            border-radius: var(--radius);
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .error-message i {
+            color: #742a2a;
+        }
+
+        /* Dashboard Section */
+        .dashboard-section,
+        .stations-section,
+        .bookings-section,
+        .profile-section,
+        .history-section {
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .welcome-banner {
+            background: linear-gradient(135deg, var(--primary-color) 0%, #008f75 100%);
+            color: white;
+            padding: 2rem;
+            border-radius: var(--radius);
+            margin-bottom: 2rem;
+            box-shadow: var(--shadow-lg);
+        }
+
+        .welcome-banner h2 {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .welcome-banner p {
+            opacity: 0.9;
+            margin-bottom: 2rem;
+        }
+
+        .quick-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .quick-stat {
+            background-color: rgba(255, 255, 255, 0.1);
+            padding: 1.5rem;
+            border-radius: var(--radius);
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            backdrop-filter: blur(10px);
+        }
+
+        .quick-stat i {
+            font-size: 2rem;
+        }
+
+        .quick-stat h3 {
+            font-size: 1.8rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .quick-stat p {
+            font-size: 0.9rem;
+            opacity: 0.8;
+            margin: 0;
+        }
+
+        /* Quick Actions */
+        .quick-actions {
+            background-color: white;
+            padding: 2rem;
+            border-radius: var(--radius);
+            margin-bottom: 2rem;
+            box-shadow: var(--shadow);
+        }
+
+        .quick-actions h3 {
+            margin-bottom: 1.5rem;
+            color: var(--secondary-color);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .action-buttons {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+
+        .action-btn {
+            background-color: var(--light-color);
+            border: 2px solid transparent;
+            padding: 1.5rem;
+            border-radius: var(--radius);
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1rem;
+            transition: var(--transition);
+        }
+
+        .action-btn:hover {
+            border-color: var(--primary-color);
+            background-color: white;
+            transform: translateY(-2px);
+        }
+
+        .action-btn i {
+            font-size: 2rem;
+            color: var(--primary-color);
+        }
+
+        .action-btn span {
+            font-weight: 500;
+            color: var(--secondary-color);
+        }
+
+        /* Recent Activity */
+        .recent-activity {
+            background-color: white;
+            padding: 2rem;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+        }
+
+        .recent-activity h3 {
+            margin-bottom: 1.5rem;
+            color: var(--secondary-color);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .activity-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .activity-item {
+            padding: 1rem;
+            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .activity-item:last-child {
+            border-bottom: none;
+        }
+
+        .activity-item i {
+            color: var(--primary-color);
+        }
+
+        .activity-item p {
+            margin: 0;
+            color: var(--secondary-color);
+        }
+
+        /* Stations Section */
+        .section-header {
+            margin-bottom: 2rem;
+        }
+
+        .section-header h2 {
+            font-size: 1.8rem;
+            color: var(--secondary-color);
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .search-container {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .search-box {
+            flex: 1;
+            position: relative;
+        }
+
+        .search-box i {
+            position: absolute;
+            left: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #718096;
+        }
+
+        .search-box input {
+            width: 100%;
+            padding: 1rem 1rem 1rem 3rem;
+            border: 1px solid #ddd;
+            border-radius: var(--radius);
+            font-size: 1rem;
+            transition: var(--transition);
+        }
+
+        .search-box input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(0, 168, 132, 0.1);
+        }
+
+        .locate-btn {
+            padding: 1rem 1.5rem;
+            background-color: var(--accent-color);
+            color: white;
+            border: none;
+            border-radius: var(--radius);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-weight: 500;
+            transition: var(--transition);
+        }
+
+        .locate-btn:hover {
+            background-color: #2c5282;
+        }
+
+        /* Filters */
+        .filters {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            padding: 1rem;
+            background-color: white;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+        }
+
+        .filter-options {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .filter-btn {
+            padding: 0.5rem 1rem;
+            background-color: var(--light-color);
+            border: 1px solid #ddd;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: var(--transition);
+        }
+
+        .filter-btn:hover,
+        .filter-btn.active {
+            background-color: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+        }
+
+        .view-toggle {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .view-btn {
+            padding: 0.5rem 1rem;
+            background-color: var(--light-color);
+            border: 1px solid #ddd;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: var(--transition);
+        }
+
+        .view-btn:hover,
+        .view-btn.active {
+            background-color: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+        }
+
+        /* Stations Content */
+        .stations-content {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 2rem;
+        }
+
+        .map-view,
+        .list-view {
+            height: 500px;
+            border-radius: var(--radius);
+            overflow: hidden;
+            box-shadow: var(--shadow);
+        }
+
+        #map {
+            height: 100%;
+            width: 100%;
+        }
+
+        .map-legend {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background-color: white;
+            padding: 1rem;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+        }
+
+        .legend-color.available {
+            background-color: var(--success-color);
+        }
+
+        .legend-color.fast {
+            background-color: var(--accent-color);
+        }
+
+        .legend-color.full {
+            background-color: var(--danger-color);
+        }
+
+        .legend-color.user {
+            background-color: #4285f4;
+        }
+
+        .list-view {
+            background-color: white;
+            overflow-y: auto;
+        }
+
+        .stations-list {
+            padding: 1rem;
+        }
+
+        .loading-stations {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            gap: 1rem;
+            color: var(--secondary-color);
+        }
+
+        .loading-stations i {
+            font-size: 2rem;
+        }
+
+        .station-card {
+            background-color: var(--light-color);
+            border: 1px solid #e2e8f0;
+            border-radius: var(--radius);
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            transition: var(--transition);
+        }
+
+        .station-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow);
+        }
+
+        .station-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 1rem;
+        }
+
+        .station-header h3 {
+            color: var(--secondary-color);
+        }
+
+        .availability-badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .availability-badge.available {
+            background-color: #c6f6d5;
+            color: #22543d;
+        }
+
+        .availability-badge.unavailable {
+            background-color: #fed7d7;
+            color: #742a2a;
+        }
+
+        .station-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .station-info p {
+            color: var(--secondary-color);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.9rem;
+        }
+
+        .station-info i {
+            color: var(--primary-color);
+            width: 20px;
+        }
+
+        .station-actions {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .btn-primary,
+        .btn-secondary,
+        .btn-success,
+        .btn-warning {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: var(--radius);
+            cursor: pointer;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: var(--transition);
+        }
+
+        .btn-primary {
+            background-color: var(--primary-color);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: #008f75;
+        }
+
+        .btn-secondary {
+            background-color: #e2e8f0;
+            color: var(--secondary-color);
+        }
+
+        .btn-secondary:hover {
+            background-color: #cbd5e0;
+        }
+
+        .btn-success {
+            background-color: var(--success-color);
+            color: white;
+        }
+
+        .btn-success:hover {
+            background-color: #2f855a;
+        }
+
+        .btn-warning {
+            background-color: var(--warning-color);
+            color: white;
+        }
+
+        .btn-warning:hover {
+            background-color: #b7791f;
+        }
+
+        .btn-primary:disabled,
+        .btn-secondary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Bookings Section */
+        .booking-tabs {
+            display: flex;
+            gap: 0.5rem;
+            border-bottom: 1px solid #e2e8f0;
+            margin-bottom: 2rem;
+        }
+
+        .tab-btn {
+            padding: 1rem 1.5rem;
+            background: none;
+            border: none;
+            border-bottom: 3px solid transparent;
+            cursor: pointer;
+            font-weight: 500;
+            color: var(--secondary-color);
+            transition: var(--transition);
+        }
+
+        .tab-btn:hover,
+        .tab-btn.active {
+            color: var(--primary-color);
+            border-bottom-color: var(--primary-color);
+        }
+
+        .bookings-content {
+            background-color: white;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            margin-bottom: 2rem;
+            overflow: hidden;
+        }
+
+        .bookings-tab {
+            padding: 2rem;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .no-bookings,
+        .no-history {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: var(--secondary-color);
+        }
+
+        .no-bookings i,
+        .no-history i {
+            font-size: 3rem;
+            color: #cbd5e0;
+            margin-bottom: 1rem;
+        }
+
+        .no-bookings h3,
+        .no-history h3 {
+            margin-bottom: 0.5rem;
+            color: var(--secondary-color);
+        }
+
+        .no-bookings p,
+        .no-history p {
+            margin-bottom: 2rem;
+            color: #718096;
+        }
+
+        .booking-card {
+            background-color: var(--light-color);
+            border: 1px solid #e2e8f0;
+            border-radius: var(--radius);
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .booking-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .booking-header h3 {
+            color: var(--secondary-color);
+        }
+
+        .status-badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .status-badge.pending {
+            background-color: #fef3c7;
+            color: #92400e;
+        }
+
+        .status-badge.confirmed {
+            background-color: #d1fae5;
+            color: #065f46;
+        }
+
+        .status-badge.active {
+            background-color: #dbeafe;
+            color: #1e40af;
+        }
+
+        .status-badge.completed {
+            background-color: #f3f4f6;
+            color: #374151;
+        }
+
+        .status-badge.cancelled {
+            background-color: #fee2e2;
+            color: #991b1b;
+        }
+
+        .booking-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .booking-info p {
+            color: var(--secondary-color);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.9rem;
+        }
+
+        .booking-actions {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .booking-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .stat-card {
+            background-color: white;
+            padding: 1.5rem;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .stat-card i {
+            font-size: 2rem;
+            color: var(--primary-color);
+        }
+
+        .stat-card h3 {
+            font-size: 1.5rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .stat-card p {
+            color: #718096;
+            font-size: 0.9rem;
+        }
+
+        /* Profile Section */
+        .profile-content {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 2rem;
+        }
+
+        @media (min-width: 1024px) {
+            .profile-content {
+                grid-template-columns: 2fr 1fr;
+            }
+        }
+
+        .profile-card,
+        .wallet-card,
+        .preferences-card {
+            background-color: white;
+            padding: 2rem;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+        }
+
+        .profile-header {
+            display: flex;
+            align-items: center;
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .profile-avatar {
+            position: relative;
+        }
+
+        .profile-avatar i {
+            font-size: 5rem;
+            color: var(--primary-color);
+        }
+
+        .edit-avatar {
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            width: 2.5rem;
+            height: 2.5rem;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .profile-info h3 {
+            font-size: 1.5rem;
+            margin-bottom: 0.5rem;
+            color: var(--secondary-color);
+        }
+
+        .profile-info p {
+            color: #718096;
+            margin-bottom: 0.25rem;
+        }
+
+        .member-since {
+            font-size: 0.9rem;
+            color: #a0aec0;
+        }
+
+        .profile-form .form-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--secondary-color);
+            font-weight: 500;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #ddd;
+            border-radius: var(--radius-sm);
+            font-size: 1rem;
+            transition: var(--transition);
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(0, 168, 132, 0.1);
+        }
+
+        .form-group input:read-only {
+            background-color: #f7fafc;
+            cursor: not-allowed;
+        }
+
+        .form-actions {
+            display: flex;
+            gap: 1rem;
+            margin-top: 2rem;
+        }
+
+        .wallet-balance {
+            margin-bottom: 2rem;
+        }
+
+        .balance-amount {
+            margin-bottom: 1.5rem;
+        }
+
+        .amount-label {
+            display: block;
+            color: #718096;
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .wallet-balance h2 {
+            font-size: 2.5rem;
+            color: var(--primary-color);
+        }
+
+        .wallet-actions {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .quick-add {
+            margin-top: 2rem;
+        }
+
+        .quick-add h4 {
+            margin-bottom: 1rem;
+            color: var(--secondary-color);
+        }
+
+        .add-options {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.5rem;
+        }
+
+        .add-option {
+            padding: 1rem;
+            background-color: var(--light-color);
+            border: 1px solid #ddd;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            font-weight: 500;
+            transition: var(--transition);
+        }
+
+        .add-option:hover {
+            background-color: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+        }
+
+        .preference-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .preference-item:last-child {
+            border-bottom: none;
+        }
+
+        .preference-info h4 {
+            color: var(--secondary-color);
+            margin-bottom: 0.25rem;
+        }
+
+        .preference-info p {
+            color: #718096;
+            font-size: 0.9rem;
+        }
+
+        /* Switch */
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 60px;
+            height: 34px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 34px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 26px;
+            width: 26px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: var(--primary-color);
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+
+        /* History Section */
+        .history-filters {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .history-filters select {
+            padding: 0.75rem;
+            border: 1px solid #ddd;
+            border-radius: var(--radius-sm);
+            font-size: 1rem;
+        }
+
+        .history-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .history-stat {
+            background-color: white;
+            padding: 1.5rem;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .history-stat i {
+            font-size: 2rem;
+            color: var(--primary-color);
+        }
+
+        .history-stat h3 {
+            font-size: 1.5rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .history-stat p {
+            color: #718096;
+            font-size: 0.9rem;
+        }
+
+        .history-list {
+            background-color: white;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            margin-bottom: 2rem;
+            overflow: hidden;
+        }
+
+        .chart-container {
+            background-color: white;
+            padding: 2rem;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+        }
+
+        .chart-container h3 {
+            margin-bottom: 1.5rem;
+            color: var(--secondary-color);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        /* Footer */
+        .user-footer {
+            background-color: var(--secondary-color);
+            color: white;
+            padding: 3rem 2rem 1rem;
+            margin-top: auto;
+        }
+
+        .footer-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 3rem;
+            margin-bottom: 2rem;
+        }
+
+        .footer-section h4 {
+            color: var(--primary-color);
+            margin-bottom: 1rem;
+        }
+
+        .footer-section a {
+            color: #cbd5e0;
+            text-decoration: none;
+            display: block;
+            margin-bottom: 0.5rem;
+            transition: color 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .footer-section a:hover {
+            color: white;
+        }
+
+        .footer-bottom {
+            text-align: center;
+            padding-top: 2rem;
+            border-top: 1px solid #4a5568;
+            color: #a0aec0;
+        }
+
+        /* Modal */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+            padding: 2rem;
+        }
+
+        .modal-content {
+            background-color: white;
+            border-radius: var(--radius);
+            max-width: 500px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            padding: 1.5rem;
+            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .close-modal {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: var(--secondary-color);
+        }
+
+        .modal-body {
+            padding: 1.5rem;
+        }
+
+        .modal-footer {
+            padding: 1.5rem;
+            border-top: 1px solid #e2e8f0;
+            display: flex;
+            justify-content: flex-end;
+            gap: 1rem;
+        }
+
+        /* Notification */
+        #notificationContainer {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 3000;
+        }
+
+        .notification-toast {
+            background-color: white;
+            border-radius: var(--radius);
+            padding: 1rem 1.5rem;
+            margin-bottom: 1rem;
+            box-shadow: var(--shadow-lg);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            min-width: 300px;
+            animation: slideInRight 0.3s ease;
+            border-left: 4px solid var(--primary-color);
+        }
+
+        @keyframes slideInRight {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        .notification-toast.success {
+            border-left-color: var(--success-color);
+        }
+
+        .notification-toast.error {
+            border-left-color: var(--danger-color);
+        }
+
+        .notification-toast.warning {
+            border-left-color: var(--warning-color);
+        }
+
+        .notification-toast button {
+            background: none;
+            border: none;
+            font-size: 1.2rem;
+            cursor: pointer;
+            color: var(--secondary-color);
+        }
+
+        /* Mobile Menu */
+        .mobile-nav {
+            display: none;
+            position: fixed;
+            top: 70px;
+            left: 0;
+            right: 0;
+            background-color: white;
+            box-shadow: var(--shadow-lg);
+            padding: 1rem;
+            z-index: 999;
+        }
+
+        .mobile-nav.active {
+            display: block;
+        }
+
+        .mobile-nav-links {
+            list-style: none;
+        }
+
+        .mobile-nav-links a {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 1rem;
+            text-decoration: none;
+            color: var(--secondary-color);
+            border-bottom: 1px solid #e2e8f0;
+            transition: var(--transition);
+        }
+
+        .mobile-nav-links a:hover,
+        .mobile-nav-links a.active {
+            color: var(--primary-color);
+            background-color: rgba(0, 168, 132, 0.05);
+        }
+
+        .mobile-nav-links a i {
+            width: 20px;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 1024px) {
+            .nav-links {
+                display: none;
+            }
+            
+            .menu-toggle {
+                display: block;
+            }
+            
+            .user-profile-toggle {
+                min-width: auto;
+                padding: 0.5rem;
+            }
+            
+            .user-details {
+                display: none;
+            }
+            
+            .dropdown-arrow {
+                display: none;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .user-header {
+                padding: 0 1rem;
+            }
+            
+            .user-main {
+                padding: 1rem;
+            }
+            
+            .user-profile-toggle {
+                padding: 0.5rem;
+            }
+            
+            .user-avatar {
+                width: 32px;
+                height: 32px;
+                font-size: 0.9rem;
+            }
+            
+            .logout-btn {
+                padding: 0.5rem 1rem;
+                font-size: 0.9rem;
+            }
+            
+            .search-container {
+                flex-direction: column;
+            }
+            
+            .filters {
+                flex-direction: column;
+                gap: 1rem;
+                align-items: stretch;
+            }
+            
+            .station-actions,
+            .booking-actions,
+            .form-actions {
+                flex-direction: column;
+            }
+            
+            .profile-header {
+                flex-direction: column;
+                text-align: center;
+            }
+            
+            .modal-content {
+                margin: 1rem;
+            }
+            
+            .user-dropdown {
+                min-width: 200px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay">
+        <div class="loading-spinner"></div>
+        <p>Loading user data...</p>
+    </div>
+
+    <div class="user-container">
+        <!-- Enhanced Header -->
+        <header class="user-header">
+            <div class="logo">
+                <h1><i class="fas fa-charging-station"></i> EVCharge</h1>
+            </div>
+            
+            <nav class="user-nav">
+                <ul class="nav-links">
+                    <li><a href="#dashboard" class="active"><i class="fas fa-tachometer-alt"></i> Dashboard</a></li>
+                    <li><a href="#stations"><i class="fas fa-map-marker-alt"></i> Stations</a></li>
+                    <li><a href="#bookings"><i class="fas fa-calendar-check"></i> Bookings</a></li>
+                    <li><a href="#history"><i class="fas fa-history"></i> History</a></li>
+                </ul>
+                
+                <div class="user-controls">
+                    <!-- User Profile Dropdown -->
+                    <div class="user-profile-container">
+                        <div class="user-profile-toggle" id="userProfileToggle">
+                            <div class="user-avatar" id="userAvatar">
+                                <i class="fas fa-user"></i>
+                            </div>
+                            <div class="user-details">
+                                <div class="user-name" id="userNameDisplay">Loading...</div>
+                                <div class="user-email" id="userEmailDisplay">Loading...</div>
+                            </div>
+                            <i class="fas fa-chevron-down dropdown-arrow"></i>
+                        </div>
+                        
+                        <!-- Dropdown Menu -->
+                        <div class="user-dropdown" id="userDropdown">
+                            <div class="dropdown-header">
+                                <div class="user-name" id="dropdownUserName">Loading...</div>
+                                <div class="user-email" id="dropdownUserEmail">Loading...</div>
+                            </div>
+                            <ul class="dropdown-menu">
+                                <li><a href="#profile"><i class="fas fa-user"></i> My Profile</a></li>
+                                <li><a href="#bookings"><i class="fas fa-calendar-alt"></i> My Bookings</a></li>
+                                <li><a href="#wallet" onclick="UserManager.getInstance().viewTransactions()"><i class="fas fa-wallet"></i> Wallet</a></li>
+                                <li><a href="#settings" onclick="UserManager.getInstance().showNotification('Settings feature coming soon!', 'info')"><i class="fas fa-cog"></i> Settings</a></li>
+                                <li class="dropdown-divider"></li>
+                                <li><a href="#help" onclick="UserManager.getInstance().showNotification('Help feature coming soon!', 'info')"><i class="fas fa-question-circle"></i> Help & Support</a></li>
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    <button id="logoutBtn" class="logout-btn">
+                        <i class="fas fa-sign-out-alt"></i> Logout
+                    </button>
+                    
+                    <button class="menu-toggle">
+                        <i class="fas fa-bars"></i>
+                    </button>
+                </div>
+            </nav>
+        </header>
+
+        <!-- Mobile Navigation -->
+        <div class="mobile-nav" id="mobileNav">
+            <ul class="mobile-nav-links">
+                <li><a href="#dashboard" class="active"><i class="fas fa-tachometer-alt"></i> Dashboard</a></li>
+                <li><a href="#stations"><i class="fas fa-map-marker-alt"></i> Find Stations</a></li>
+                <li><a href="#bookings"><i class="fas fa-calendar-check"></i> My Bookings</a></li>
+                <li><a href="#profile"><i class="fas fa-user"></i> Profile</a></li>
+                <li><a href="#history"><i class="fas fa-history"></i> History</a></li>
+            </ul>
+        </div>
+
+        <!-- Error Display Area -->
+        <div id="errorContainer" class="hidden" style="padding: 0 2rem;"></div>
+
+        <!-- Main Content -->
+        <main class="user-main">
+            <!-- Dashboard Section -->
+            <section id="dashboard" class="dashboard-section">
+                <div class="welcome-banner">
+                    <h2>Welcome back, <span id="welcomeName">User</span>!</h2>
+                    <p>Find and book EV charging stations near you</p>
+                    <div class="quick-stats">
+                        <div class="quick-stat">
+                            <i class="fas fa-bolt"></i>
+                            <div>
+                                <h3 id="totalBookings">0</h3>
+                                <p>Total Bookings</p>
+                            </div>
+                        </div>
+                        <div class="quick-stat">
+                            <i class="fas fa-car"></i>
+                            <div>
+                                <h3 id="activeBookings">0</h3>
+                                <p>Active Bookings</p>
+                            </div>
+                        </div>
+                        <div class="quick-stat">
+                            <i class="fas fa-wallet"></i>
+                            <div>
+                                <h3 id="userBalance">$0.00</h3>
+                                <p>Wallet Balance</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quick Actions -->
+                <div class="quick-actions">
+                    <h3><i class="fas fa-bolt"></i> Quick Actions</h3>
+                    <div class="action-buttons">
+                        <button class="action-btn" onclick="UserManager.getInstance().getUserLocation()">
+                            <i class="fas fa-location-arrow"></i>
+                            <span>Find Nearby Stations</span>
+                        </button>
+                        <button class="action-btn" onclick="UserManager.getInstance().viewUpcomingBookings()">
+                            <i class="fas fa-calendar"></i>
+                            <span>View Upcoming Bookings</span>
+                        </button>
+                        <button class="action-btn" onclick="UserManager.getInstance().addFunds()">
+                            <i class="fas fa-plus-circle"></i>
+                            <span>Add Funds to Wallet</span>
+                        </button>
+                        <button class="action-btn" onclick="UserManager.getInstance().viewHistory()">
+                            <i class="fas fa-history"></i>
+                            <span>View Charging History</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Recent Activity -->
+                <div class="recent-activity">
+                    <h3><i class="fas fa-clock"></i> Recent Activity</h3>
+                    <div id="activityList" class="activity-list">
+                        <div class="activity-item">
+                            <i class="fas fa-info-circle"></i>
+                            <p>No recent activity found</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Find Stations Section -->
+            <section id="stations" class="stations-section hidden">
+                <div class="section-header">
+                    <h2><i class="fas fa-map-marker-alt"></i> Find Charging Stations</h2>
+                    <div class="search-container">
+                        <div class="search-box">
+                            <i class="fas fa-search"></i>
+                            <input type="text" id="searchLocation" placeholder="Search by location or station name...">
+                        </div>
+                        <button id="locateUser" class="locate-btn">
+                            <i class="fas fa-location-arrow"></i> Use My Location
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Filters -->
+                <div class="filters">
+                    <h4>Filter by:</h4>
+                    <div class="filter-options">
+                        <button class="filter-btn active" data-filter="all">All Stations</button>
+                        <button class="filter-btn" data-filter="available">Available Now</button>
+                        <button class="filter-btn" data-filter="fast">Fast Charging</button>
+                        <button class="filter-btn" data-filter="cheap">Lowest Price</button>
+                    </div>
+                    <div class="view-toggle">
+                        <button class="view-btn active" data-view="map">
+                            <i class="fas fa-map"></i> Map View
+                        </button>
+                        <button class="view-btn" data-view="list">
+                            <i class="fas fa-list"></i> List View
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Map and Stations -->
+                <div class="stations-content">
+                    <!-- Map View -->
+                    <div id="mapView" class="map-view">
+                        <div id="map"></div>
+                        <div class="map-legend">
+                            <div class="legend-item">
+                                <div class="legend-color available"></div>
+                                <span>Available</span>
+                            </div>
+                            <div class="legend-item">
+                                <div class="legend-color fast"></div>
+                                <span>Fast Charging</span>
+                            </div>
+                            <div class="legend-item">
+                                <div class="legend-color full"></div>
+                                <span>Full</span>
+                            </div>
+                            <div class="legend-item">
+                                <div class="legend-color user"></div>
+                                <span>Your Location</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- List View (Hidden by default) -->
+                    <div id="listView" class="list-view hidden">
+                        <div class="stations-list" id="stationsList">
+                            <div class="loading-stations">
+                                <i class="fas fa-spinner fa-spin"></i>
+                                <p>Loading stations...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- My Bookings Section -->
+            <section id="bookings" class="bookings-section hidden">
+                <div class="section-header">
+                    <h2><i class="fas fa-calendar-check"></i> My Bookings</h2>
+                    <div class="booking-tabs">
+                        <button class="tab-btn active" data-tab="upcoming">Upcoming</button>
+                        <button class="tab-btn" data-tab="active">Active</button>
+                        <button class="tab-btn" data-tab="past">Past</button>
+                        <button class="tab-btn" data-tab="cancelled">Cancelled</button>
+                    </div>
+                </div>
+
+                <div class="bookings-content">
+                    <!-- Upcoming Bookings -->
+                    <div id="upcomingBookings" class="bookings-tab">
+                        <div class="bookings-list" id="bookingsList">
+                            <div class="no-bookings">
+                                <i class="fas fa-calendar-times"></i>
+                                <h3>No Upcoming Bookings</h3>
+                                <p>You don't have any upcoming bookings</p>
+                                <button class="btn-primary" onclick="UserManager.getInstance().navigateToStations()">
+                                    <i class="fas fa-plus"></i> Book a Station
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Active Bookings -->
+                    <div id="activeBookingsTab" class="bookings-tab hidden">
+                        <div class="bookings-list" id="activeBookingsList">
+                            <!-- Active bookings will be loaded here -->
+                        </div>
+                    </div>
+
+                    <!-- Past Bookings -->
+                    <div id="pastBookings" class="bookings-tab hidden">
+                        <div class="bookings-list" id="pastBookingsList">
+                            <!-- Past bookings will be loaded here -->
+                        </div>
+                    </div>
+
+                    <!-- Cancelled Bookings -->
+                    <div id="cancelledBookings" class="bookings-tab hidden">
+                        <div class="bookings-list" id="cancelledBookingsList">
+                            <!-- Cancelled bookings will be loaded here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Booking Stats -->
+                <div class="booking-stats">
+                    <div class="stat-card">
+                        <i class="fas fa-check-circle"></i>
+                        <div>
+                            <h3 id="completedBookings">0</h3>
+                            <p>Completed</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <i class="fas fa-clock"></i>
+                        <div>
+                            <h3 id="pendingBookings">0</h3>
+                            <p>Pending</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <i class="fas fa-times-circle"></i>
+                        <div>
+                            <h3 id="cancelledCount">0</h3>
+                            <p>Cancelled</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <i class="fas fa-dollar-sign"></i>
+                        <div>
+                            <h3 id="totalSpent">$0</h3>
+                            <p>Total Spent</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Profile Section -->
+            <section id="profile" class="profile-section hidden">
+                <div class="section-header">
+                    <h2><i class="fas fa-user"></i> My Profile</h2>
+                </div>
+
+                <div class="profile-content">
+                    <div class="profile-card">
+                        <div class="profile-header">
+                            <div class="profile-avatar">
+                                <i class="fas fa-user-circle"></i>
+                                <button class="edit-avatar">
+                                    <i class="fas fa-camera"></i>
+                                </button>
+                            </div>
+                            <div class="profile-info">
+                                <h3 id="profileName">Loading...</h3>
+                                <p id="profileEmail">Loading...</p>
+                                <p class="member-since">Member since: <span id="memberSince">2024</span></p>
+                            </div>
+                        </div>
+
+                        <form id="profileForm" class="profile-form">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="fullName">Full Name *</label>
+                                    <input type="text" id="fullName" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="phoneNumber">Phone Number *</label>
+                                    <input type="tel" id="phoneNumber" required>
+                                </div>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="email">Email Address *</label>
+                                    <input type="email" id="email" required readonly>
+                                </div>
+                                <div class="form-group">
+                                    <label for="vehicleModel">Vehicle Model</label>
+                                    <input type="text" id="vehicleModel" placeholder="e.g., Tesla Model 3">
+                                </div>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="licensePlate">License Plate</label>
+                                    <input type="text" id="licensePlate" placeholder="Optional">
+                                </div>
+                                <div class="form-group">
+                                    <label for="preferredCharger">Preferred Charger Type</label>
+                                    <select id="preferredCharger">
+                                        <option value="any">Any Type</option>
+                                        <option value="fast">Fast Charging</option>
+                                        <option value="normal">Normal Charging</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="address">Address</label>
+                                <textarea id="address" rows="2" placeholder="Enter your address"></textarea>
+                            </div>
+
+                            <div class="form-actions">
+                                <button type="submit" class="btn-primary">
+                                    <i class="fas fa-save"></i> Save Changes
+                                </button>
+                                <button type="button" class="btn-secondary" onclick="UserManager.getInstance().changePassword()">
+                                    <i class="fas fa-key"></i> Change Password
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Wallet Section -->
+                    <div class="wallet-card">
+                        <h3><i class="fas fa-wallet"></i> My Wallet</h3>
+                        <div class="wallet-balance">
+                            <div class="balance-amount">
+                                <span class="amount-label">Available Balance</span>
+                                <h2 id="walletBalance">$0.00</h2>
+                            </div>
+                            <div class="wallet-actions">
+                                <button class="btn-success" onclick="UserManager.getInstance().addFunds()">
+                                    <i class="fas fa-plus"></i> Add Funds
+                                </button>
+                                <button class="btn-secondary" onclick="UserManager.getInstance().viewTransactions()">
+                                    <i class="fas fa-history"></i> Transaction History
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="quick-add">
+                            <h4>Quick Add:</h4>
+                            <div class="add-options">
+                                <button class="add-option" data-amount="10">$10</button>
+                                <button class="add-option" data-amount="20">$20</button>
+                                <button class="add-option" data-amount="50">$50</button>
+                                <button class="add-option" data-amount="100">$100</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Preferences -->
+                    <div class="preferences-card">
+                        <h3><i class="fas fa-cog"></i> Preferences</h3>
+                        <div class="preference-item">
+                            <div class="preference-info">
+                                <h4>Email Notifications</h4>
+                                <p>Receive booking confirmations and updates</p>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" id="emailNotifications" checked>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div class="preference-item">
+                            <div class="preference-info">
+                                <h4>SMS Notifications</h4>
+                                <p>Get text alerts for bookings</p>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" id="smsNotifications">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div class="preference-item">
+                            <div class="preference-info">
+                                <h4>Auto-extend Booking</h4>
+                                <p>Automatically extend if charging is not complete</p>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" id="autoExtend">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div class="preference-item">
+                            <div class="preference-info">
+                                <h4>Favorite Stations</h4>
+                                <p>Save your frequently used stations</p>
+                            </div>
+                            <button class="btn-secondary" onclick="UserManager.getInstance().viewFavorites()">
+                                <i class="fas fa-star"></i> View Favorites
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- History Section -->
+            <section id="history" class="history-section hidden">
+                <div class="section-header">
+                    <h2><i class="fas fa-history"></i> Charging History</h2>
+                    <div class="history-filters">
+                        <select id="historyFilter">
+                            <option value="all">All Time</option>
+                            <option value="month">This Month</option>
+                            <option value="week">This Week</option>
+                            <option value="today">Today</option>
+                        </select>
+                        <button class="btn-secondary" onclick="UserManager.getInstance().exportHistory()">
+                            <i class="fas fa-download"></i> Export History
+                        </button>
+                    </div>
+                </div>
+
+                <div class="history-content">
+                    <div class="history-stats">
+                        <div class="history-stat">
+                            <i class="fas fa-bolt"></i>
+                            <div>
+                                <h3 id="totalSessions">0</h3>
+                                <p>Total Sessions</p>
+                            </div>
+                        </div>
+                        <div class="history-stat">
+                            <i class="fas fa-clock"></i>
+                            <div>
+                                <h3 id="totalHours">0</h3>
+                                <p>Total Hours</p>
+                            </div>
+                        </div>
+                        <div class="history-stat">
+                            <i class="fas fa-leaf"></i>
+                            <div>
+                                <h3 id="co2Saved">0</h3>
+                                <p>CO₂ Saved (kg)</p>
+                            </div>
+                        </div>
+                        <div class="history-stat">
+                            <i class="fas fa-money-bill-wave"></i>
+                            <div>
+                                <h3 id="historySpent">$0</h3>
+                                <p>Total Spent</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="history-list" id="historyList">
+                        <div class="no-history">
+                            <i class="fas fa-history"></i>
+                            <h3>No Charging History</h3>
+                            <p>You haven't completed any charging sessions yet</p>
+                        </div>
+                    </div>
+
+                    <!-- Monthly Summary Chart -->
+                    <div class="chart-container">
+                        <h3><i class="fas fa-chart-line"></i> Monthly Usage</h3>
+                        <canvas id="usageChart"></canvas>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Footer -->
+        <footer class="user-footer">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h4>EVCharge</h4>
+                    <p>Making EV charging accessible and convenient</p>
+                </div>
+                <div class="footer-section">
+                    <h4>Support</h4>
+                    <a href="mailto:support@evcharge.com"><i class="fas fa-envelope"></i> support@evcharge.com</a>
+                    <a href="tel:+18003824274"><i class="fas fa-phone"></i> 1-800-EV-CHARGE</a>
+                </div>
+                <div class="footer-section">
+                    <h4>Quick Links</h4>
+                    <a href="#dashboard">Dashboard</a>
+                    <a href="#stations">Find Stations</a>
+                    <a href="#bookings">My Bookings</a>
+                    <a href="#profile">Profile</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2024 EVCharge. All rights reserved.</p>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Modal Template -->
+    <div id="modalTemplate" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Modal Title</h3>
+                <button class="close-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- Content will be inserted here -->
+            </div>
+            <div class="modal-footer">
+                <!-- Buttons will be inserted here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Container -->
+    <div id="notificationContainer"></div>
+
+    <script>
+        // Firebase Configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyCwlOYb-GNV7kBqX_Bo58OTN1FlINqGhao",
+            authDomain: "electric-vehicle-recharg-bee81.firebaseapp.com",
+            projectId: "electric-vehicle-recharg-bee81",
+            storageBucket: "electric-vehicle-recharg-bee81.firebasestorage.app",
+            messagingSenderId: "320394409518",
+            appId: "1:320394409518:web:42142d9e41200b976091bf",
+            measurementId: "G-DZEKDPXZVT"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+        const storage = firebase.storage();
+
+        class UserManager {
+            constructor() {
+                this.map = null;
+                this.user = null;
+                this.userData = null;
+                this.currentSection = 'dashboard';
+                this.stations = [];
+                this.bookings = [];
+                this.realTimeListeners = [];
+                this.init();
+            }
+
+            static getInstance() {
+                if (!UserManager.instance) {
+                    UserManager.instance = new UserManager();
+                }
+                return UserManager.instance;
+            }
+
+            async init() {
+                this.setupEventListeners();
+                await this.checkAuthState();
+                this.initializeNavigation();
+                this.initializeUserDropdown();
+                this.setupRealTimeListeners();
+            }
+
+            setupEventListeners() {
+                // Logout button
+                document.getElementById('logoutBtn').addEventListener('click', () => this.logout());
+
+                // Mobile menu toggle
+                const menuToggle = document.querySelector('.menu-toggle');
+                if (menuToggle) {
+                    menuToggle.addEventListener('click', () => this.toggleMobileMenu());
+                }
+
+                // Navigation links
+                document.querySelectorAll('.nav-links a, .mobile-nav-links a').forEach(link => {
+                    link.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        const section = link.getAttribute('href').substring(1);
+                        this.showSection(section);
+                        this.updateActiveNav(link);
+                        
+                        // Close mobile menu if open
+                        document.getElementById('mobileNav').classList.remove('active');
+                    });
+                });
+
+                // Profile form submission
+                const profileForm = document.getElementById('profileForm');
+                if (profileForm) {
+                    profileForm.addEventListener('submit', (e) => this.saveProfile(e));
+                }
+
+                // Quick add funds buttons
+                document.querySelectorAll('.add-option').forEach(button => {
+                    button.addEventListener('click', (e) => {
+                        const amount = e.target.getAttribute('data-amount');
+                        this.addFundsToWallet(amount);
+                    });
+                });
+
+                // Search functionality
+                const searchLocation = document.getElementById('searchLocation');
+                if (searchLocation) {
+                    searchLocation.addEventListener('keypress', (e) => {
+                        if (e.key === 'Enter') {
+                            this.searchStations(e.target.value);
+                        }
+                    });
+                }
+
+                // Locate user button
+                const locateUser = document.getElementById('locateUser');
+                if (locateUser) {
+                    locateUser.addEventListener('click', () => this.getUserLocation());
+                }
+
+                // Filter buttons
+                document.querySelectorAll('.filter-btn').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                        btn.classList.add('active');
+                        this.filterStations(btn.getAttribute('data-filter'));
+                    });
+                });
+
+                // View toggle buttons
+                document.querySelectorAll('.view-btn').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const view = btn.getAttribute('data-view');
+                        document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
+                        btn.classList.add('active');
+                        this.switchView(view);
+                    });
+                });
+
+                // Booking tabs
+                document.querySelectorAll('.tab-btn').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const tab = btn.getAttribute('data-tab');
+                        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                        btn.classList.add('active');
+                        this.switchBookingTab(tab);
+                    });
+                });
+
+                // Footer links
+                document.querySelectorAll('.footer-section a[href^="#"]').forEach(link => {
+                    link.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        const section = link.getAttribute('href').substring(1);
+                        this.showSection(section);
+                    });
+                });
+
+                // Date display
+                this.updateCurrentDate();
+            }
+
+            setupRealTimeListeners() {
+                // Clean up any existing listeners
+                this.realTimeListeners.forEach(unsubscribe => unsubscribe());
+                this.realTimeListeners = [];
+
+                if (!this.user) return;
+
+                // Listen for station updates
+                const stationsListener = db.collection('stations')
+                    .where('isActive', '==', true)
+                    .onSnapshot((snapshot) => {
+                        this.stations = [];
+                        snapshot.forEach(doc => {
+                            const station = { id: doc.id, ...doc.data() };
+                            
+                            // Calculate available slots
+                            this.calculateAvailableSlots(station.id).then(availableSlots => {
+                                station.availableSlots = availableSlots;
+                                this.stations.push(station);
+                                
+                                // Update UI if we're in stations section
+                                if (this.currentSection === 'stations') {
+                                    this.updateStationsList();
+                                    this.updateMapMarkers();
+                                }
+                            });
+                        });
+                    }, (error) => {
+                        console.error('Stations listener error:', error);
+                    });
+
+                this.realTimeListeners.push(stationsListener);
+
+                // Listen for user's booking updates
+                const bookingsListener = db.collection('bookings')
+                    .where('userId', '==', this.user.uid)
+                    .onSnapshot((snapshot) => {
+                        this.bookings = [];
+                        snapshot.forEach(doc => {
+                            this.bookings.push({ id: doc.id, ...doc.data() });
+                        });
+                        
+                        // Update UI if we're in bookings section
+                        if (this.currentSection === 'bookings') {
+                            this.updateBookingsList();
+                            this.updateBookingStats();
+                        }
+                        
+                        // Update dashboard stats
+                        this.updateDashboardStats();
+                    }, (error) => {
+                        console.error('Bookings listener error:', error);
+                    });
+
+                this.realTimeListeners.push(bookingsListener);
+            }
+
+            initializeUserDropdown() {
+                const toggle = document.getElementById('userProfileToggle');
+                const dropdown = document.getElementById('userDropdown');
+
+                // Toggle dropdown
+                toggle.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    toggle.classList.toggle('active');
+                    dropdown.classList.toggle('active');
+                });
+
+                // Close dropdown when clicking outside
+                document.addEventListener('click', (e) => {
+                    if (!toggle.contains(e.target) && !dropdown.contains(e.target)) {
+                        toggle.classList.remove('active');
+                        dropdown.classList.remove('active');
+                    }
+                });
+
+                // Close dropdown on mobile nav click
+                document.querySelectorAll('.dropdown-menu a').forEach(link => {
+                    link.addEventListener('click', () => {
+                        toggle.classList.remove('active');
+                        dropdown.classList.remove('active');
+                    });
+                });
+            }
+
+            toggleMobileMenu() {
+                const mobileNav = document.getElementById('mobileNav');
+                mobileNav.classList.toggle('active');
+            }
+
+            initializeNavigation() {
+                // Handle hash navigation
+                window.addEventListener('hashchange', () => {
+                    const hash = window.location.hash.substring(1);
+                    if (hash) {
+                        this.showSection(hash);
+                        this.updateActiveNav(document.querySelector(`a[href="#${hash}"]`));
+                    }
+                });
+
+                // Check initial hash
+                if (window.location.hash) {
+                    const hash = window.location.hash.substring(1);
+                    this.showSection(hash);
+                    this.updateActiveNav(document.querySelector(`a[href="#${hash}"]`));
+                }
+            }
+
+            updateCurrentDate() {
+                const dateElement = document.getElementById('currentDate');
+                if (dateElement) {
+                    const now = new Date();
+                    const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+                    dateElement.textContent = now.toLocaleDateString('en-US', options);
+                }
+            }
+
+            async checkAuthState() {
+                try {
+                    // Show loading overlay
+                    this.showLoading();
+                    
+                    auth.onAuthStateChanged(async (user) => {
+                        if (user) {
+                            this.user = user;
+                            await this.loadUserData();
+                            this.updateUserInfo();
+                            this.updateNavbarUserInfo();
+                            await this.loadDashboardData();
+                            this.setupRealTimeListeners();
+                            this.showNotification(`Welcome back, ${this.userData.name}!`, 'success');
+                            this.hideLoading();
+                        } else {
+                            // Redirect to login if not authenticated
+                            window.location.href = 'login.html';
+                        }
+                    }, (error) => {
+                        console.error('Auth state error:', error);
+                        this.showError('Authentication error. Please try logging in again.');
+                        this.hideLoading();
+                    });
+                } catch (error) {
+                    console.error('Error in checkAuthState:', error);
+                    this.showError('Failed to check authentication status.');
+                    this.hideLoading();
+                }
+            }
+
+            async loadUserData() {
+                try {
+                    console.log('Loading user data for UID:', this.user.uid);
+                    
+                    // First check if user document exists
+                    const userRef = db.collection('users').doc(this.user.uid);
+                    const userDoc = await userRef.get();
+                    
+                    if (userDoc.exists) {
+                        this.userData = userDoc.data();
+                        console.log('User data loaded:', this.userData);
+                    } else {
+                        console.log('User document does not exist, creating new one...');
+                        // Create user document if it doesn't exist
+                        this.userData = {
+                            name: this.user.displayName || this.user.email.split('@')[0],
+                            email: this.user.email,
+                            phone: '',
+                            vehicleModel: '',
+                            licensePlate: '',
+                            address: '',
+                            preferredCharger: 'any',
+                            walletBalance: 0,
+                            totalBookings: 0,
+                            completedCharges: 0,
+                            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                            role: 'user'
+                        };
+                        
+                        await userRef.set(this.userData);
+                        console.log('New user document created:', this.userData);
+                    }
+                } catch (error) {
+                    console.error('Error loading user data:', error);
+                    
+                    // Show specific error message
+                    if (error.code === 'permission-denied') {
+                        this.showError('Permission denied. Please check Firebase security rules.');
+                    } else {
+                        this.showError(`Error loading user data: ${error.message}`);
+                    }
+                    
+                    // Create basic user data from auth
+                    this.userData = {
+                        name: this.user.displayName || this.user.email.split('@')[0],
+                        email: this.user.email,
+                        phone: '',
+                        vehicleModel: '',
+                        licensePlate: '',
+                        address: '',
+                        preferredCharger: 'any',
+                        walletBalance: 0,
+                        totalBookings: 0,
+                        completedCharges: 0,
+                        createdAt: new Date(),
+                        role: 'user'
+                    };
+                }
+            }
+
+            updateUserInfo() {
+                try {
+                    // Get first letter of user's name for avatar
+                    const userName = this.userData?.name || 'User';
+                    const firstLetter = userName.charAt(0).toUpperCase();
+                    
+                    // Update user avatar
+                    const userAvatar = document.getElementById('userAvatar');
+                    if (firstLetter && userAvatar) {
+                        userAvatar.innerHTML = firstLetter;
+                    }
+                    
+                    // Update welcome banner
+                    const welcomeName = document.getElementById('welcomeName');
+                    if (welcomeName) {
+                        welcomeName.textContent = userName;
+                    }
+                    
+                    // Update profile section
+                    const profileName = document.getElementById('profileName');
+                    const profileEmail = document.getElementById('profileEmail');
+                    const memberSince = document.getElementById('memberSince');
+                    
+                    if (profileName) profileName.textContent = userName;
+                    if (profileEmail) profileEmail.textContent = this.user.email || 'No email';
+                    
+                    if (this.userData?.createdAt && memberSince) {
+                        let createdDate;
+                        if (this.userData.createdAt.toDate) {
+                            createdDate = this.userData.createdAt.toDate();
+                        } else if (this.userData.createdAt instanceof Date) {
+                            createdDate = this.userData.createdAt;
+                        } else {
+                            createdDate = new Date(this.userData.createdAt);
+                        }
+                        memberSince.textContent = createdDate.getFullYear();
+                    } else if (memberSince) {
+                        memberSince.textContent = new Date().getFullYear();
+                    }
+                    
+                    // Update profile form
+                    const fullName = document.getElementById('fullName');
+                    const phoneNumber = document.getElementById('phoneNumber');
+                    const email = document.getElementById('email');
+                    const vehicleModel = document.getElementById('vehicleModel');
+                    const licensePlate = document.getElementById('licensePlate');
+                    const address = document.getElementById('address');
+                    const preferredCharger = document.getElementById('preferredCharger');
+                    
+                    if (fullName) fullName.value = userName || '';
+                    if (phoneNumber) phoneNumber.value = this.userData?.phone || '';
+                    if (email) email.value = this.user.email || '';
+                    if (vehicleModel) vehicleModel.value = this.userData?.vehicleModel || '';
+                    if (licensePlate) licensePlate.value = this.userData?.licensePlate || '';
+                    if (address) address.value = this.userData?.address || '';
+                    if (preferredCharger) preferredCharger.value = this.userData?.preferredCharger || 'any';
+                    
+                    // Update wallet balance
+                    const walletBalance = document.getElementById('walletBalance');
+                    const userBalance = document.getElementById('userBalance');
+                    
+                    if (walletBalance) {
+                        walletBalance.textContent = `$${(this.userData?.walletBalance || 0).toFixed(2)}`;
+                    }
+                    if (userBalance) {
+                        userBalance.textContent = `$${(this.userData?.walletBalance || 0).toFixed(2)}`;
+                    }
+                } catch (error) {
+                    console.error('Error updating user info:', error);
+                    this.showError('Failed to update user information.');
+                }
+            }
+
+            updateNavbarUserInfo() {
+                try {
+                    // Update navbar user info
+                    const userName = this.userData?.name || 'User';
+                    const userEmail = this.user.email || 'No email';
+                    
+                    // Update main display
+                    const userNameDisplay = document.getElementById('userNameDisplay');
+                    const userEmailDisplay = document.getElementById('userEmailDisplay');
+                    
+                    if (userNameDisplay) userNameDisplay.textContent = userName;
+                    if (userEmailDisplay) userEmailDisplay.textContent = userEmail;
+                    
+                    // Update dropdown display
+                    const dropdownUserName = document.getElementById('dropdownUserName');
+                    const dropdownUserEmail = document.getElementById('dropdownUserEmail');
+                    
+                    if (dropdownUserName) dropdownUserName.textContent = userName;
+                    if (dropdownUserEmail) dropdownUserEmail.textContent = userEmail;
+                    
+                    // Update avatar with first letter
+                    const userAvatar = document.getElementById('userAvatar');
+                    const firstLetter = userName.charAt(0).toUpperCase();
+                    if (firstLetter && userAvatar) {
+                        userAvatar.innerHTML = firstLetter;
+                    }
+                } catch (error) {
+                    console.error('Error updating navbar user info:', error);
+                }
+            }
+
+            showSection(sectionId) {
+                try {
+                    // Hide all sections
+                    document.querySelectorAll('.dashboard-section, .stations-section, .bookings-section, .profile-section, .history-section').forEach(section => {
+                        section.classList.add('hidden');
+                    });
+
+                    // Show selected section
+                    const section = document.getElementById(sectionId);
+                    if (section) {
+                        section.classList.remove('hidden');
+                        this.currentSection = sectionId;
+
+                        // Load section-specific data
+                        switch(sectionId) {
+                            case 'stations':
+                                this.loadStations();
+                                break;
+                            case 'bookings':
+                                this.loadBookings();
+                                break;
+                            case 'profile':
+                                // Data already loaded in updateUserInfo
+                                break;
+                            case 'history':
+                                this.loadHistory();
+                                break;
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error showing section:', error);
+                    this.showError(`Failed to load section: ${sectionId}`);
+                }
+            }
+
+            updateActiveNav(activeLink) {
+                // Update desktop nav
+                document.querySelectorAll('.nav-links a').forEach(link => {
+                    link.classList.remove('active');
+                });
+                
+                // Update mobile nav
+                document.querySelectorAll('.mobile-nav-links a').forEach(link => {
+                    link.classList.remove('active');
+                });
+                
+                if (activeLink) {
+                    const href = activeLink.getAttribute('href');
+                    document.querySelectorAll(`a[href="${href}"]`).forEach(link => {
+                        link.classList.add('active');
+                    });
+                }
+            }
+
+            async saveProfile(e) {
+                e.preventDefault();
+                
+                try {
+                    this.showLoading();
+                    
+                    const updatedData = {
+                        name: document.getElementById('fullName').value,
+                        phone: document.getElementById('phoneNumber').value,
+                        vehicleModel: document.getElementById('vehicleModel').value,
+                        licensePlate: document.getElementById('licensePlate').value,
+                        address: document.getElementById('address').value,
+                        preferredCharger: document.getElementById('preferredCharger').value,
+                        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    };
+
+                    await db.collection('users').doc(this.user.uid).update(updatedData);
+                    
+                    // Update local data
+                    Object.assign(this.userData, updatedData);
+                    
+                    // Update displayed info
+                    this.updateUserInfo();
+                    this.updateNavbarUserInfo();
+                    
+                    this.showNotification('Profile updated successfully', 'success');
+                    this.hideLoading();
+                } catch (error) {
+                    console.error('Error updating profile:', error);
+                    this.showNotification('Error updating profile: ' + error.message, 'error');
+                    this.hideLoading();
+                }
+            }
+
+            async loadDashboardData() {
+                try {
+                    // Update dashboard stats
+                    await this.updateDashboardStats();
+
+                    // Load recent activity
+                    await this.loadRecentActivity();
+
+                } catch (error) {
+                    console.error('Error loading dashboard data:', error);
+                    this.showError('Failed to load dashboard data.');
+                }
+            }
+
+            async updateDashboardStats() {
+                try {
+                    // Load bookings count
+                    const bookingsSnapshot = await db.collection('bookings')
+                        .where('userId', '==', this.user.uid)
+                        .get();
+                    
+                    const totalBookings = bookingsSnapshot.size;
+                    const activeBookings = bookingsSnapshot.docs.filter(doc => {
+                        const data = doc.data();
+                        return data.status === 'active' || data.status === 'confirmed' || data.status === 'pending';
+                    }).length;
+
+                    const totalBookingsElement = document.getElementById('totalBookings');
+                    const activeBookingsElement = document.getElementById('activeBookings');
+                    
+                    if (totalBookingsElement) totalBookingsElement.textContent = totalBookings;
+                    if (activeBookingsElement) activeBookingsElement.textContent = activeBookings;
+
+                } catch (error) {
+                    console.error('Error updating dashboard stats:', error);
+                }
+            }
+
+            async loadRecentActivity() {
+                try {
+                    const activityList = document.getElementById('activityList');
+                    
+                    if (!activityList) return;
+                    
+                    // Try to get recent activities from Firestore
+                    try {
+                        const activitiesSnapshot = await db.collection('activities')
+                            .where('userId', '==', this.user.uid)
+                            .orderBy('timestamp', 'desc')
+                            .limit(5)
+                            .get();
+
+                        if (activitiesSnapshot.empty) {
+                            // Show sample activities if none exist
+                            activityList.innerHTML = `
+                                <div class="activity-item">
+                                    <i class="fas fa-user-check"></i>
+                                    <p>Account created successfully</p>
+                                </div>
+                                <div class="activity-item">
+                                    <i class="fas fa-bolt"></i>
+                                    <p>Welcome to EVCharge! Start booking stations</p>
+                                </div>
+                            `;
+                        } else {
+                            activityList.innerHTML = '';
+                            activitiesSnapshot.docs.forEach(doc => {
+                                const activity = doc.data();
+                                const activityItem = document.createElement('div');
+                                activityItem.className = 'activity-item';
+                                activityItem.innerHTML = `
+                                    <i class="fas fa-${activity.icon || 'info-circle'}"></i>
+                                    <p>${activity.message}</p>
+                                `;
+                                activityList.appendChild(activityItem);
+                            });
+                        }
+                    } catch (error) {
+                        // If permission denied, show sample activities
+                        console.log('Activities permission denied, showing sample data');
+                        activityList.innerHTML = `
+                            <div class="activity-item">
+                                <i class="fas fa-user-check"></i>
+                                <p>Account created successfully</p>
+                            </div>
+                            <div class="activity-item">
+                                <i class="fas fa-bolt"></i>
+                                <p>Welcome to EVCharge! Start booking stations</p>
+                            </div>
+                        `;
+                    }
+                } catch (error) {
+                    console.error('Error loading recent activity:', error);
+                    const activityList = document.getElementById('activityList');
+                    if (activityList) {
+                        activityList.innerHTML = `
+                            <div class="activity-item">
+                                <i class="fas fa-exclamation-triangle"></i>
+                                <p>Error loading recent activity</p>
+                            </div>
+                        `;
+                    }
+                }
+            }
+
+            async loadStations() {
+                try {
+                    const stationsList = document.getElementById('stationsList');
+                    if (!stationsList) return;
+                    
+                    stationsList.innerHTML = `
+                        <div class="loading-stations">
+                            <i class="fas fa-spinner fa-spin"></i>
+                            <p>Loading stations...</p>
+                        </div>
+                    `;
+
+                    // Load stations from Firestore with error handling
+                    try {
+                        const stationsSnapshot = await db.collection('stations')
+                            .where('isActive', '==', true)
+                            .get();
+
+                        if (stationsSnapshot.empty) {
+                            // Show sample stations if none exist
+                            this.stations = [
+                                {
+                                    id: '1',
+                                    name: 'Downtown Charging Hub',
+                                    address: '123 Main St, New York, NY 10001',
+                                    city: 'New York',
+                                    state: 'NY',
+                                    zip: '10001',
+                                    availableSlots: 4,
+                                    totalSlots: 8,
+                                    chargerType: 'fast',
+                                    pricePerHour: 12.99,
+                                    status: 'active',
+                                    isActive: true,
+                                    coordinates: { latitude: 40.7128, longitude: -74.0060 }
+                                },
+                                {
+                                    id: '2',
+                                    name: 'Green Energy Station',
+                                    address: '456 Park Ave, New York, NY 10022',
+                                    city: 'New York',
+                                    state: 'NY',
+                                    zip: '10022',
+                                    availableSlots: 2,
+                                    totalSlots: 6,
+                                    chargerType: 'normal',
+                                    pricePerHour: 9.99,
+                                    status: 'active',
+                                    isActive: true,
+                                    coordinates: { latitude: 40.7589, longitude: -73.9851 }
+                                }
+                            ];
+                        } else {
+                            this.stations = [];
+                            for (const doc of stationsSnapshot.docs) {
+                                const station = { id: doc.id, ...doc.data() };
+                                // Calculate available slots
+                                station.availableSlots = await this.calculateAvailableSlots(station.id);
+                                this.stations.push(station);
+                            }
+                        }
+
+                        this.updateStationsList();
+
+                        // Initialize map if in stations section
+                        if (this.currentSection === 'stations') {
+                            this.initializeMap();
+                        }
+
+                    } catch (error) {
+                        console.error('Error loading stations from Firestore:', error);
+                        // Show sample stations on error
+                        this.stations = [
+                            {
+                                id: '1',
+                                name: 'Downtown Charging Hub',
+                                address: '123 Main St',
+                                availableSlots: 4,
+                                totalSlots: 8,
+                                chargerType: 'fast',
+                                pricePerHour: 12.99,
+                                status: 'available'
+                            }
+                        ];
+                        this.updateStationsList();
+                        this.showNotification('Using demo station data', 'info');
+                    }
+
+                } catch (error) {
+                    console.error('Error loading stations:', error);
+                    const stationsList = document.getElementById('stationsList');
+                    if (stationsList) {
+                        stationsList.innerHTML = `
+                            <div class="loading-stations">
+                                <i class="fas fa-exclamation-triangle"></i>
+                                <p>Error loading stations. Please try again.</p>
+                            </div>
+                        `;
+                    }
+                }
+            }
+
+            async calculateAvailableSlots(stationId) {
+                try {
+                    // Get station document
+                    const stationDoc = await db.collection('stations').doc(stationId).get();
+                    if (!stationDoc.exists) return 0;
+                    
+                    const station = stationDoc.data();
+                    const totalSlots = station.totalSlots || 0;
+                    
+                    // Get active bookings for this station
+                    const now = new Date();
+                    const bookingsSnapshot = await db.collection('bookings')
+                        .where('stationId', '==', stationId)
+                        .where('status', 'in', ['pending', 'confirmed', 'active'])
+                        .where('endTime', '>', now)
+                        .get();
+                    
+                    const activeBookings = bookingsSnapshot.size;
+                    const availableSlots = Math.max(0, totalSlots - activeBookings);
+                    
+                    return availableSlots;
+                } catch (error) {
+                    console.error('Error calculating available slots:', error);
+                    return 0;
+                }
+            }
+
+            updateStationsList() {
+                const stationsList = document.getElementById('stationsList');
+                if (!stationsList) return;
+                
+                if (this.stations.length === 0) {
+                    stationsList.innerHTML = `
+                        <div class="empty-state">
+                            <i class="fas fa-charging-station"></i>
+                            <h3>No Stations Available</h3>
+                            <p>No charging stations found in your area</p>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                stationsList.innerHTML = '';
+                this.stations.forEach(station => {
+                    const stationCard = this.createStationCard(station);
+                    stationsList.appendChild(stationCard);
+                });
+            }
+
+            createStationCard(station) {
+                const card = document.createElement('div');
+                card.className = 'station-card';
+                
+                const availableSlots = station.availableSlots || 0;
+                const totalSlots = station.totalSlots || 0;
+                const isAvailable = availableSlots > 0;
+                const badgeClass = isAvailable ? 'available' : 'unavailable';
+                const badgeText = isAvailable ? `${availableSlots} Available` : 'Full';
+                
+                card.innerHTML = `
+                    <div class="station-header">
+                        <h3>${station.name}</h3>
+                        <span class="availability-badge ${badgeClass}">${badgeText}</span>
+                    </div>
+                    <div class="station-info">
+                        <p><i class="fas fa-map-marker-alt"></i> ${station.address || 'N/A'}</p>
+                        <p><i class="fas fa-phone"></i> ${station.contactNumber || 'N/A'}</p>
+                        <p><i class="fas fa-bolt"></i> ${station.chargerType === 'fast' ? 'Fast Charging' : 'Normal Charging'}</p>
+                        <p><i class="fas fa-car"></i> ${availableSlots}/${totalSlots} slots</p>
+                        <p><i class="fas fa-dollar-sign"></i> $${station.pricePerHour || '0.00'}/hour</p>
+                    </div>
+                    <div class="station-actions">
+                        <button class="btn-primary" onclick="UserManager.getInstance().bookStation('${station.id}')" ${!isAvailable ? 'disabled' : ''}>
+                            <i class="fas fa-calendar-plus"></i> Book Now
+                        </button>
+                        <button class="btn-secondary" onclick="UserManager.getInstance().viewStationDetails('${station.id}')">
+                            <i class="fas fa-info-circle"></i> Details
+                        </button>
+                    </div>
+                `;
+                
+                return card;
+            }
+
+            updateMapMarkers() {
+                if (!this.map || !this.stations.length) return;
+                
+                // Clear existing markers
+                if (this.markers) {
+                    this.markers.forEach(marker => marker.setMap(null));
+                }
+                this.markers = [];
+                
+                // Add new markers
+                this.stations.forEach(station => {
+                    if (station.coordinates) {
+                        const marker = new google.maps.Marker({
+                            position: {
+                                lat: station.coordinates.latitude,
+                                lng: station.coordinates.longitude
+                            },
+                            map: this.map,
+                            title: station.name,
+                            icon: this.getMarkerIcon(station)
+                        });
+                        
+                        // Add info window
+                        const infoWindow = new google.maps.InfoWindow({
+                            content: this.getStationInfoWindowContent(station)
+                        });
+                        
+                        marker.addListener('click', () => {
+                            infoWindow.open(this.map, marker);
+                        });
+                        
+                        this.markers.push(marker);
+                    }
+                });
+            }
+
+            getMarkerIcon(station) {
+                const availableSlots = station.availableSlots || 0;
+                let fillColor = availableSlots > 0 ? "#00a884" : "#e53e3e";
+                
+                if (station.chargerType === 'fast') {
+                    fillColor = availableSlots > 0 ? "#3182ce" : "#c53030";
+                }
+                
+                return {
+                    path: google.maps.SymbolPath.CIRCLE,
+                    fillColor: fillColor,
+                    fillOpacity: 0.8,
+                    strokeWeight: 2,
+                    strokeColor: "#FFFFFF",
+                    scale: 10
+                };
+            }
+
+            getStationInfoWindowContent(station) {
+                const availableSlots = station.availableSlots || 0;
+                const isAvailable = availableSlots > 0;
+                
+                return `
+                    <div style="padding: 10px; min-width: 200px;">
+                        <h3 style="margin: 0 0 10px 0; color: #2d3748;">${station.name}</h3>
+                        <p style="margin: 0 0 5px 0; color: #4a5568;">${station.address || ''}</p>
+                        <p style="margin: 0 0 5px 0; color: #4a5568;">${station.city || ''}, ${station.state || ''} ${station.zip || ''}</p>
+                        <hr style="margin: 10px 0;">
+                        <p style="margin: 0 0 5px 0;"><strong>Available Slots:</strong> ${availableSlots}/${station.totalSlots || 0}</p>
+                        <p style="margin: 0 0 5px 0;"><strong>Charger Type:</strong> ${station.chargerType}</p>
+                        <p style="margin: 0 0 10px 0;"><strong>Price:</strong> $${station.pricePerHour || 0}/hour</p>
+                        <button onclick="UserManager.getInstance().bookStation('${station.id}')" 
+                                style="padding: 8px 16px; background-color: ${isAvailable ? '#00a884' : '#718096'}; color: white; border: none; border-radius: 4px; cursor: ${isAvailable ? 'pointer' : 'not-allowed'}; width: 100%;"
+                                ${!isAvailable ? 'disabled' : ''}>
+                            ${isAvailable ? 'Book Now' : 'No Slots Available'}
+                        </button>
+                    </div>
+                `;
+            }
+
+            initializeMap() {
+                try {
+                    // Default center
+                    const defaultCenter = { lat: 40.7128, lng: -74.0060 };
+                    
+                    this.map = new google.maps.Map(document.getElementById('map'), {
+                        center: defaultCenter,
+                        zoom: 12,
+                        styles: [
+                            {
+                                featureType: "poi",
+                                elementType: "labels",
+                                stylers: [{ visibility: "off" }]
+                            }
+                        ]
+                    });
+
+                    // Update markers
+                    this.updateMapMarkers();
+
+                } catch (error) {
+                    console.error('Error initializing map:', error);
+                    this.showNotification('Failed to load map. Please check your internet connection.', 'warning');
+                }
+            }
+
+            getUserLocation() {
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(
+                        (position) => {
+                            const userLocation = {
+                                lat: position.coords.latitude,
+                                lng: position.coords.longitude
+                            };
+                            
+                            // Center map on user location if map exists
+                            if (this.map) {
+                                this.map.setCenter(userLocation);
+                                this.map.setZoom(14);
+                                
+                                // Add user marker
+                                new google.maps.Marker({
+                                    position: userLocation,
+                                    map: this.map,
+                                    icon: {
+                                        path: google.maps.SymbolPath.CIRCLE,
+                                        scale: 10,
+                                        fillColor: "#4285F4",
+                                        fillOpacity: 1,
+                                        strokeWeight: 2,
+                                        strokeColor: "#FFFFFF"
+                                    },
+                                    title: "Your Location"
+                                });
+                            }
+                            
+                            this.showNotification('Location found!', 'success');
+                        },
+                        (error) => {
+                            console.error("Error getting location:", error);
+                            let errorMessage = 'Unable to get your location. ';
+                            
+                            switch(error.code) {
+                                case error.PERMISSION_DENIED:
+                                    errorMessage += 'Please allow location access in your browser settings.';
+                                    break;
+                                case error.POSITION_UNAVAILABLE:
+                                    errorMessage += 'Location information is unavailable.';
+                                    break;
+                                case error.TIMEOUT:
+                                    errorMessage += 'Location request timed out.';
+                                    break;
+                                default:
+                                    errorMessage += 'An unknown error occurred.';
+                            }
+                            
+                            this.showNotification(errorMessage, 'warning');
+                            
+                            // Center map on default location
+                            if (this.map) {
+                                this.map.setCenter({ lat: 40.7128, lng: -74.0060 });
+                                this.map.setZoom(12);
+                            }
+                        }
+                    );
+                } else {
+                    this.showNotification('Geolocation is not supported by your browser', 'warning');
+                }
+            }
+
+            searchStations(query) {
+                if (!query.trim()) {
+                    this.showNotification('Please enter a search term', 'warning');
+                    return;
+                }
+                
+                const filteredStations = this.stations.filter(station => 
+                    station.name.toLowerCase().includes(query.toLowerCase()) ||
+                    station.address.toLowerCase().includes(query.toLowerCase()) ||
+                    (station.city && station.city.toLowerCase().includes(query.toLowerCase()))
+                );
+                
+                const stationsList = document.getElementById('stationsList');
+                if (stationsList) {
+                    stationsList.innerHTML = '';
+                    filteredStations.forEach(station => {
+                        const stationCard = this.createStationCard(station);
+                        stationsList.appendChild(stationCard);
+                    });
+                    
+                    if (filteredStations.length === 0) {
+                        stationsList.innerHTML = `
+                            <div class="empty-state">
+                                <i class="fas fa-search"></i>
+                                <h3>No Stations Found</h3>
+                                <p>No stations match your search: "${query}"</p>
+                            </div>
+                        `;
+                    }
+                }
+                
+                this.showNotification(`Found ${filteredStations.length} station(s)`, 'info');
+            }
+
+            filterStations(filterType) {
+                let filteredStations = [...this.stations];
+                
+                switch(filterType) {
+                    case 'available':
+                        filteredStations = filteredStations.filter(station => station.availableSlots > 0);
+                        break;
+                    case 'fast':
+                        filteredStations = filteredStations.filter(station => station.chargerType === 'fast');
+                        break;
+                    case 'cheap':
+                        filteredStations.sort((a, b) => (a.pricePerHour || 0) - (b.pricePerHour || 0));
+                        break;
+                }
+                
+                const stationsList = document.getElementById('stationsList');
+                if (stationsList) {
+                    stationsList.innerHTML = '';
+                    filteredStations.forEach(station => {
+                        const stationCard = this.createStationCard(station);
+                        stationsList.appendChild(stationCard);
+                    });
+                    
+                    if (filteredStations.length === 0) {
+                        stationsList.innerHTML = `
+                            <div class="empty-state">
+                                <i class="fas fa-filter"></i>
+                                <h3>No Stations Match Filter</h3>
+                                <p>Try changing your filter criteria</p>
+                            </div>
+                        `;
+                    }
+                }
+                
+                this.showNotification(`Filtered: ${filterType} (${filteredStations.length} stations)`, 'info');
+            }
+
+            switchView(viewType) {
+                const mapView = document.getElementById('mapView');
+                const listView = document.getElementById('listView');
+                
+                if (viewType === 'map') {
+                    mapView.classList.remove('hidden');
+                    listView.classList.add('hidden');
+                    if (!this.map) {
+                        this.initializeMap();
+                    }
+                } else {
+                    mapView.classList.add('hidden');
+                    listView.classList.remove('hidden');
+                }
+            }
+
+            async loadBookings() {
+                try {
+                    await this.updateBookingsList();
+                    await this.updateBookingStats();
+                } catch (error) {
+                    console.error('Error loading bookings:', error);
+                    const bookingsList = document.getElementById('bookingsList');
+                    if (bookingsList) {
+                        bookingsList.innerHTML = `
+                            <div class="no-bookings">
+                                <i class="fas fa-exclamation-triangle"></i>
+                                <h3>Error Loading Bookings</h3>
+                                <p>Please try again later</p>
+                            </div>
+                        `;
+                    }
+                }
+            }
+
+            async updateBookingsList() {
+                try {
+                    const bookingsList = document.getElementById('bookingsList');
+                    if (!bookingsList) return;
+                    
+                    // Filter upcoming bookings (pending, confirmed, active)
+                    const upcomingBookings = this.bookings.filter(booking => 
+                        ['pending', 'confirmed', 'active'].includes(booking.status)
+                    );
+                    
+                    if (upcomingBookings.length === 0) {
+                        bookingsList.innerHTML = `
+                            <div class="no-bookings">
+                                <i class="fas fa-calendar-times"></i>
+                                <h3>No Upcoming Bookings</h3>
+                                <p>You don't have any upcoming bookings</p>
+                                <button class="btn-primary" onclick="UserManager.getInstance().navigateToStations()">
+                                    <i class="fas fa-plus"></i> Book a Station
+                                </button>
+                            </div>
+                        `;
+                    } else {
+                        bookingsList.innerHTML = '';
+                        upcomingBookings.forEach(booking => {
+                            const bookingCard = this.createBookingCard(booking);
+                            bookingsList.appendChild(bookingCard);
+                        });
+                    }
+                } catch (error) {
+                    console.error('Error updating bookings list:', error);
+                }
+            }
+
+            async updateBookingStats() {
+                try {
+                    const completedBookings = this.bookings.filter(b => b.status === 'completed').length;
+                    const pendingBookings = this.bookings.filter(b => b.status === 'pending').length;
+                    const cancelledCount = this.bookings.filter(b => b.status === 'cancelled').length;
+                    
+                    // Calculate total spent from completed bookings
+                    const totalSpent = this.bookings
+                        .filter(b => b.status === 'completed')
+                        .reduce((sum, booking) => sum + (booking.totalPrice || 0), 0);
+
+                    const completedElement = document.getElementById('completedBookings');
+                    const pendingElement = document.getElementById('pendingBookings');
+                    const cancelledElement = document.getElementById('cancelledCount');
+                    const totalSpentElement = document.getElementById('totalSpent');
+                    
+                    if (completedElement) completedElement.textContent = completedBookings;
+                    if (pendingElement) pendingElement.textContent = pendingBookings;
+                    if (cancelledElement) cancelledElement.textContent = cancelledCount;
+                    if (totalSpentElement) totalSpentElement.textContent = `$${totalSpent.toFixed(2)}`;
+
+                } catch (error) {
+                    console.error('Error updating booking stats:', error);
+                }
+            }
+
+            createBookingCard(booking) {
+                const card = document.createElement('div');
+                card.className = 'booking-card';
+                
+                const statusClass = booking.status || 'pending';
+                const statusText = (booking.status || 'pending').charAt(0).toUpperCase() + (booking.status || 'pending').slice(1);
+                
+                // Format date
+                let date = 'N/A';
+                let time = 'N/A';
+                
+                try {
+                    const startTime = booking.startTime?.toDate();
+                    const endTime = booking.endTime?.toDate();
+                    date = startTime ? startTime.toLocaleDateString() : 'N/A';
+                    time = startTime && endTime ? 
+                        `${startTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} - ${endTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}` : 
+                        'N/A';
+                } catch (error) {
+                    console.error('Error formatting booking time:', error);
+                }
+                
+                card.innerHTML = `
+                    <div class="booking-header">
+                        <h3>${booking.stationName || 'Unknown Station'}</h3>
+                        <span class="status-badge ${statusClass}">${statusText}</span>
+                    </div>
+                    <div class="booking-info">
+                        <p><i class="fas fa-calendar"></i> ${date}</p>
+                        <p><i class="fas fa-clock"></i> ${time}</p>
+                        <p><i class="fas fa-hourglass-half"></i> ${booking.duration || 'N/A'} hours</p>
+                        <p><i class="fas fa-dollar-sign"></i> $${(booking.totalPrice || 0).toFixed(2)}</p>
+                    </div>
+                    <div class="booking-actions">
+                        ${booking.status === 'confirmed' || booking.status === 'pending' ? `
+                            <button class="btn-warning" onclick="UserManager.getInstance().cancelBooking('${booking.id}')">
+                                <i class="fas fa-times"></i> Cancel
+                            </button>
+                        ` : ''}
+                        <button class="btn-secondary" onclick="UserManager.getInstance().viewBookingDetails('${booking.id}')">
+                            <i class="fas fa-info-circle"></i> Details
+                        </button>
+                    </div>
+                `;
+                
+                return card;
+            }
+
+            switchBookingTab(tab) {
+                // Hide all tabs
+                document.querySelectorAll('.bookings-tab').forEach(tabElement => {
+                    tabElement.classList.add('hidden');
+                });
+
+                // Show selected tab
+                const selectedTab = document.getElementById(`${tab}Bookings`);
+                if (selectedTab) {
+                    selectedTab.classList.remove('hidden');
+                } else if (tab === 'active') {
+                    document.getElementById('activeBookingsTab').classList.remove('hidden');
+                }
+
+                // Load data for the selected tab
+                this.loadTabBookings(tab);
+            }
+
+            async loadTabBookings(tab) {
+                try {
+                    let filteredBookings = [];
+                    
+                    switch(tab) {
+                        case 'upcoming':
+                            filteredBookings = this.bookings.filter(b => ['pending', 'confirmed'].includes(b.status));
+                            break;
+                        case 'active':
+                            filteredBookings = this.bookings.filter(b => b.status === 'active');
+                            break;
+                        case 'past':
+                            filteredBookings = this.bookings.filter(b => b.status === 'completed');
+                            break;
+                        case 'cancelled':
+                            filteredBookings = this.bookings.filter(b => b.status === 'cancelled');
+                            break;
+                    }
+
+                    const containerId = `${tab}BookingsList`;
+                    const container = document.getElementById(containerId);
+
+                    if (!container) return;
+
+                    if (filteredBookings.length === 0) {
+                        container.innerHTML = `
+                            <div class="no-bookings">
+                                <i class="fas fa-calendar-times"></i>
+                                <h3>No ${tab} bookings</h3>
+                                <p>You don't have any ${tab} bookings</p>
+                            </div>
+                        `;
+                    } else {
+                        container.innerHTML = '';
+                        filteredBookings.forEach(booking => {
+                            const bookingCard = this.createBookingCard(booking);
+                            container.appendChild(bookingCard);
+                        });
+                    }
+                } catch (error) {
+                    console.error(`Error loading ${tab} bookings:`, error);
+                    const containerId = `${tab}BookingsList`;
+                    const container = document.getElementById(containerId);
+                    if (container) {
+                        container.innerHTML = `
+                            <div class="no-bookings">
+                                <i class="fas fa-calendar-times"></i>
+                                <h3>No ${tab} bookings</h3>
+                                <p>You don't have any ${tab} bookings</p>
+                            </div>
+                        `;
+                    }
+                }
+            }
+
+            async loadHistory() {
+                try {
+                    const historyList = document.getElementById('historyList');
+                    if (!historyList) return;
+                    
+                    // Filter completed bookings
+                    const completedBookings = this.bookings.filter(b => b.status === 'completed');
+                    
+                    if (completedBookings.length === 0) {
+                        historyList.innerHTML = `
+                            <div class="no-history">
+                                <i class="fas fa-history"></i>
+                                <h3>No Charging History</h3>
+                                <p>You haven't completed any charging sessions yet</p>
+                            </div>
+                        `;
+                    } else {
+                        historyList.innerHTML = '';
+                        let totalHours = 0;
+                        let totalSpent = 0;
+
+                        completedBookings.forEach(booking => {
+                            const historyItem = document.createElement('div');
+                            historyItem.className = 'booking-card';
+                            
+                            let startTime = null;
+                            let duration = booking.duration || 0;
+                            
+                            try {
+                                startTime = booking.startTime?.toDate();
+                                totalHours += duration;
+                                totalSpent += booking.totalPrice || 0;
+                            } catch (error) {
+                                console.error('Error processing history item:', error);
+                            }
+
+                            historyItem.innerHTML = `
+                                <div class="booking-header">
+                                    <h3>${booking.stationName || 'Unknown Station'}</h3>
+                                    <span class="status-badge completed">Completed</span>
+                                </div>
+                                <div class="booking-info">
+                                    <p><i class="fas fa-calendar"></i> ${startTime ? startTime.toLocaleDateString() : 'N/A'}</p>
+                                    <p><i class="fas fa-clock"></i> ${duration} hours</p>
+                                    <p><i class="fas fa-bolt"></i> ${booking.energyUsed || '0'} kWh</p>
+                                    <p><i class="fas fa-dollar-sign"></i> $${(booking.totalPrice || 0).toFixed(2)}</p>
+                                </div>
+                            `;
+                            historyList.appendChild(historyItem);
+                        });
+
+                        // Update history stats
+                        const totalSessions = document.getElementById('totalSessions');
+                        const totalHoursElement = document.getElementById('totalHours');
+                        const historySpent = document.getElementById('historySpent');
+                        const co2Saved = document.getElementById('co2Saved');
+                        
+                        if (totalSessions) totalSessions.textContent = completedBookings.length;
+                        if (totalHoursElement) totalHoursElement.textContent = totalHours.toFixed(1);
+                        if (historySpent) historySpent.textContent = `$${totalSpent.toFixed(2)}`;
+                        if (co2Saved) co2Saved.textContent = (totalHours * 0.4).toFixed(1);
+                    }
+
+                } catch (error) {
+                    console.error('Error loading history:', error);
+                    const historyList = document.getElementById('historyList');
+                    if (historyList) {
+                        historyList.innerHTML = `
+                            <div class="no-history">
+                                <i class="fas fa-exclamation-triangle"></i>
+                                <h3>Error Loading History</h3>
+                                <p>Please try again later</p>
+                            </div>
+                        `;
+                    }
+                }
+            }
+
+            // Quick Actions Methods
+            viewUpcomingBookings() {
+                this.showSection('bookings');
+            }
+
+            addFunds() {
+                this.showModal('Add Funds', `
+                    <div class="form-group">
+                        <label for="amount">Amount to Add ($)</label>
+                        <input type="number" id="amount" min="1" step="0.01" placeholder="Enter amount" value="20">
+                    </div>
+                    <div class="form-group">
+                        <label for="paymentMethod">Payment Method</label>
+                        <select id="paymentMethod">
+                            <option value="credit">Credit Card</option>
+                            <option value="debit">Debit Card</option>
+                            <option value="paypal">PayPal</option>
+                        </select>
+                    </div>
+                `, [
+                    { text: 'Cancel', type: 'secondary', action: 'close' },
+                    { 
+                        text: 'Add Funds', 
+                        type: 'primary', 
+                        action: () => {
+                            const amount = document.getElementById('amount').value;
+                            const paymentMethod = document.getElementById('paymentMethod').value;
+                            this.addFundsToWallet(amount, paymentMethod);
+                        }
+                    }
+                ]);
+            }
+
+            viewHistory() {
+                this.showSection('history');
+            }
+
+            navigateToStations() {
+                this.showSection('stations');
+            }
+
+            // Booking Methods
+            async bookStation(stationId) {
+                try {
+                    // Get station details
+                    const stationDoc = await db.collection('stations').doc(stationId).get();
+                    if (!stationDoc.exists) {
+                        this.showNotification('Station not found', 'error');
+                        return;
+                    }
+                    
+                    const station = stationDoc.data();
+                    
+                    // Check if station is active
+                    if (!station.isActive) {
+                        this.showNotification('This station is currently unavailable', 'error');
+                        return;
+                    }
+                    
+                    // Check available slots
+                    const availableSlots = await this.calculateAvailableSlots(stationId);
+                    if (availableSlots <= 0) {
+                        this.showNotification('No slots available at this station', 'error');
+                        return;
+                    }
+                    
+                    // Show booking form
+                    this.showBookingForm(station);
+                    
+                } catch (error) {
+                    console.error('Error booking station:', error);
+                    this.showNotification('Error loading station details', 'error');
+                }
+            }
+
+            showBookingForm(station) {
+                this.showModal('Book Station', `
+                    <div class="form-group">
+                        <label for="bookingDate">Date *</label>
+                        <input type="date" id="bookingDate" min="${new Date().toISOString().split('T')[0]}" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="startTime">Start Time *</label>
+                        <input type="time" id="startTime" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="duration">Duration (hours) *</label>
+                        <select id="duration" required>
+                            <option value="1">1 hour</option>
+                            <option value="2" selected>2 hours</option>
+                            <option value="3">3 hours</option>
+                            <option value="4">4 hours</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="vehicleType">Vehicle Type *</label>
+                        <input type="text" id="vehicleType" required placeholder="e.g., Tesla Model 3">
+                    </div>
+                    <div class="form-group">
+                        <label for="licensePlate">License Plate (Optional)</label>
+                        <input type="text" id="licensePlate" placeholder="e.g., ABC-123">
+                    </div>
+                    <div class="price-summary">
+                        <h4>Price Summary</h4>
+                        <p>Duration: <span id="durationDisplay">2</span> hours</p>
+                        <p>Rate: $${station.pricePerHour || 0}/hour</p>
+                        <p><strong>Total: $<span id="totalPrice">${(station.pricePerHour || 0) * 2}</span></strong></p>
+                    </div>
+                `, [
+                    { text: 'Cancel', type: 'secondary', action: 'close' },
+                    { 
+                        text: 'Confirm Booking', 
+                        type: 'primary', 
+                        action: () => this.confirmBooking(station) 
+                    }
+                ]);
+                
+                // Update price when duration changes
+                const durationSelect = document.getElementById('duration');
+                const durationDisplay = document.getElementById('durationDisplay');
+                const totalPrice = document.getElementById('totalPrice');
+                
+                if (durationSelect && durationDisplay && totalPrice) {
+                    durationSelect.addEventListener('change', (e) => {
+                        const duration = parseInt(e.target.value);
+                        const total = duration * (station.pricePerHour || 0);
+                        
+                        durationDisplay.textContent = duration;
+                        totalPrice.textContent = total.toFixed(2);
+                    });
+                }
+            }
+
+            async confirmBooking(station) {
+                try {
+                    this.showLoading();
+                    
+                    const date = document.getElementById('bookingDate').value;
+                    const startTime = document.getElementById('startTime').value;
+                    const duration = parseInt(document.getElementById('duration').value);
+                    const vehicleType = document.getElementById('vehicleType').value;
+                    const licensePlate = document.getElementById('licensePlate').value;
+                    
+                    if (!date || !startTime || !duration || !vehicleType) {
+                        this.showNotification('Please fill in all required fields', 'error');
+                        this.hideLoading();
+                        return;
+                    }
+                    
+                    // Parse date and time
+                    const startDateTime = new Date(`${date}T${startTime}`);
+                    const endDateTime = new Date(startDateTime.getTime() + (duration * 60 * 60 * 1000));
+                    
+                    // Check if booking is in the future
+                    if (startDateTime < new Date()) {
+                        this.showNotification('Booking time must be in the future', 'error');
+                        this.hideLoading();
+                        return;
+                    }
+                    
+                    // Calculate total price
+                    const totalPrice = duration * (station.pricePerHour || 0);
+                    
+                    // Check wallet balance
+                    if (this.userData.walletBalance < totalPrice) {
+                        this.showNotification('Insufficient wallet balance. Please add funds.', 'error');
+                        this.hideLoading();
+                        this.addFunds();
+                        return;
+                    }
+                    
+                    // Check slot availability again (to prevent race conditions)
+                    const availableSlots = await this.calculateAvailableSlots(station.id);
+                    if (availableSlots <= 0) {
+                        this.showNotification('No slots available. Please choose another time.', 'error');
+                        this.hideLoading();
+                        return;
+                    }
+                    
+                    // Create booking
+                    const bookingData = {
+                        stationId: station.id,
+                        stationName: station.name,
+                        userId: this.user.uid,
+                        userName: this.userData.name,
+                        userEmail: this.user.email,
+                        startTime: firebase.firestore.Timestamp.fromDate(startDateTime),
+                        endTime: firebase.firestore.Timestamp.fromDate(endDateTime),
+                        duration: duration,
+                        vehicleType: vehicleType,
+                        licensePlate: licensePlate || '',
+                        totalPrice: totalPrice,
+                        status: 'pending',
+                        paymentStatus: 'pending',
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                    };
+                    
+                    // Add booking to Firestore
+                    const bookingRef = await db.collection('bookings').add(bookingData);
+                    
+                    // Deduct from wallet
+                    const newBalance = this.userData.walletBalance - totalPrice;
+                    await db.collection('users').doc(this.user.uid).update({
+                        walletBalance: newBalance
+                    });
+                    
+                    // Update local data
+                    this.userData.walletBalance = newBalance;
+                    this.updateUserInfo();
+                    this.updateNavbarUserInfo();
+                    
+                    // Add activity
+                    try {
+                        await db.collection('activities').add({
+                            userId: this.user.uid,
+                            message: `Booked ${station.name} for ${date}`,
+                            icon: 'calendar-check',
+                            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                    } catch (error) {
+                        console.log('Activity creation skipped');
+                    }
+                    
+                    this.showNotification('Booking created successfully!', 'success');
+                    this.closeModal();
+                    
+                    // Refresh data
+                    this.loadBookings();
+                    this.loadStations();
+                    
+                    this.hideLoading();
+                    
+                } catch (error) {
+                    console.error('Error confirming booking:', error);
+                    this.showNotification('Error creating booking: ' + error.message, 'error');
+                    this.hideLoading();
+                }
+            }
+
+            async addFundsToWallet(amount, paymentMethod = 'credit') {
+                try {
+                    if (!amount || amount <= 0) {
+                        this.showNotification('Please enter a valid amount', 'error');
+                        return;
+                    }
+
+                    this.showLoading();
+                    
+                    const amountNum = parseFloat(amount);
+                    const newBalance = (this.userData.walletBalance || 0) + amountNum;
+                    
+                    await db.collection('users').doc(this.user.uid).update({
+                        walletBalance: newBalance
+                    });
+                    
+                    this.userData.walletBalance = newBalance;
+                    this.updateUserInfo();
+                    this.updateNavbarUserInfo();
+                    
+                    // Add transaction record
+                    try {
+                        await db.collection('transactions').add({
+                            userId: this.user.uid,
+                            type: 'deposit',
+                            amount: amountNum,
+                            paymentMethod: paymentMethod,
+                            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                    } catch (error) {
+                        console.log('Transaction record creation skipped');
+                    }
+
+                    // Add activity
+                    try {
+                        await db.collection('activities').add({
+                            userId: this.user.uid,
+                            message: `Added $${amountNum.toFixed(2)} to wallet`,
+                            icon: 'wallet',
+                            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                    } catch (error) {
+                        console.log('Activity creation skipped');
+                    }
+
+                    this.showNotification(`Successfully added $${amountNum.toFixed(2)} to your wallet`, 'success');
+                    this.closeModal();
+                    this.hideLoading();
+                } catch (error) {
+                    console.error('Error adding funds:', error);
+                    this.showNotification('Error adding funds: ' + error.message, 'error');
+                    this.hideLoading();
+                }
+            }
+
+            async cancelBooking(bookingId) {
+                try {
+                    // Get booking details
+                    const bookingDoc = await db.collection('bookings').doc(bookingId).get();
+                    if (!bookingDoc.exists) {
+                        this.showNotification('Booking not found', 'error');
+                        return;
+                    }
+                    
+                    const booking = bookingDoc.data();
+                    
+                    // Check if booking can be cancelled
+                    if (booking.status === 'cancelled' || booking.status === 'completed') {
+                        this.showNotification('This booking cannot be cancelled', 'error');
+                        return;
+                    }
+                    
+                    // Ask for confirmation
+                    if (!confirm('Are you sure you want to cancel this booking?')) {
+                        return;
+                    }
+                    
+                    this.showLoading();
+                    
+                    // Update booking status
+                    await db.collection('bookings').doc(bookingId).update({
+                        status: 'cancelled',
+                        cancelledAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    
+                    // Refund to wallet if payment was made
+                    if (booking.paymentStatus === 'paid' || booking.status === 'confirmed') {
+                        const refundAmount = booking.totalPrice || 0;
+                        const newBalance = (this.userData.walletBalance || 0) + refundAmount;
+                        
+                        await db.collection('users').doc(this.user.uid).update({
+                            walletBalance: newBalance
+                        });
+                        
+                        this.userData.walletBalance = newBalance;
+                        this.updateUserInfo();
+                        this.updateNavbarUserInfo();
+                    }
+                    
+                    // Add activity
+                    try {
+                        await db.collection('activities').add({
+                            userId: this.user.uid,
+                            message: `Cancelled booking at ${booking.stationName}`,
+                            icon: 'calendar-times',
+                            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                    } catch (error) {
+                        console.log('Activity creation skipped');
+                    }
+                    
+                    this.showNotification('Booking cancelled successfully', 'success');
+                    
+                    // Refresh data
+                    this.loadBookings();
+                    
+                    this.hideLoading();
+                    
+                } catch (error) {
+                    console.error('Error cancelling booking:', error);
+                    this.showNotification('Error cancelling booking: ' + error.message, 'error');
+                    this.hideLoading();
+                }
+            }
+
+            viewStationDetails(stationId) {
+                this.showNotification('Station details feature coming soon!', 'info');
+            }
+
+            viewBookingDetails(bookingId) {
+                this.showNotification('Booking details feature coming soon!', 'info');
+            }
+
+            changePassword() {
+                this.showModal('Change Password', `
+                    <div class="form-group">
+                        <label for="currentPassword">Current Password</label>
+                        <input type="password" id="currentPassword" placeholder="Enter current password">
+                    </div>
+                    <div class="form-group">
+                        <label for="newPassword">New Password</label>
+                        <input type="password" id="newPassword" placeholder="Enter new password">
+                    </div>
+                    <div class="form-group">
+                        <label for="confirmPassword">Confirm New Password</label>
+                        <input type="password" id="confirmPassword" placeholder="Confirm new password">
+                    </div>
+                `, [
+                    { text: 'Cancel', type: 'secondary', action: 'close' },
+                    { 
+                        text: 'Change Password', 
+                        type: 'primary', 
+                        action: async () => {
+                            this.showLoading();
+                            
+                            const currentPassword = document.getElementById('currentPassword').value;
+                            const newPassword = document.getElementById('newPassword').value;
+                            const confirmPassword = document.getElementById('confirmPassword').value;
+
+                            if (!currentPassword || !newPassword || !confirmPassword) {
+                                this.showNotification('Please fill in all fields', 'error');
+                                this.hideLoading();
+                                return;
+                            }
+
+                            if (newPassword !== confirmPassword) {
+                                this.showNotification('New passwords do not match', 'error');
+                                this.hideLoading();
+                                return;
+                            }
+
+                            if (newPassword.length < 6) {
+                                this.showNotification('Password must be at least 6 characters', 'error');
+                                this.hideLoading();
+                                return;
+                            }
+
+                            try {
+                                // Re-authenticate user
+                                const credential = firebase.auth.EmailAuthProvider.credential(
+                                    this.user.email, 
+                                    currentPassword
+                                );
+                                
+                                await this.user.reauthenticateWithCredential(credential);
+                                
+                                // Update password
+                                await this.user.updatePassword(newPassword);
+                                
+                                this.showNotification('Password changed successfully!', 'success');
+                                this.closeModal();
+                            } catch (error) {
+                                console.error('Error changing password:', error);
+                                if (error.code === 'auth/wrong-password') {
+                                    this.showNotification('Current password is incorrect', 'error');
+                                } else if (error.code === 'auth/weak-password') {
+                                    this.showNotification('Password is too weak', 'error');
+                                } else {
+                                    this.showNotification('Error changing password: ' + error.message, 'error');
+                                }
+                            }
+                            
+                            this.hideLoading();
+                        }
+                    }
+                ]);
+            }
+
+            async updatePassword() {
+                this.changePassword();
+            }
+
+            viewTransactions() {
+                this.showModal('Transaction History', `
+                    <div class="loading-transactions">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <p>Loading transactions...</p>
+                    </div>
+                `, [
+                    { text: 'Close', type: 'secondary', action: 'close' }
+                ]);
+
+                // Load transactions
+                this.loadTransactions();
+            }
+
+            async loadTransactions() {
+                try {
+                    const modalBody = document.querySelector('.modal-body');
+                    if (!modalBody) return;
+                    
+                    try {
+                        const transactionsSnapshot = await db.collection('transactions')
+                            .where('userId', '==', this.user.uid)
+                            .orderBy('timestamp', 'desc')
+                            .limit(20)
+                            .get();
+
+                        if (transactionsSnapshot.empty) {
+                            modalBody.innerHTML = `
+                                <div class="no-transactions">
+                                    <i class="fas fa-receipt"></i>
+                                    <h4>No Transactions</h4>
+                                    <p>You haven't made any transactions yet</p>
+                                </div>
+                            `;
+                        } else {
+                            let html = '<div class="transactions-list">';
+                            transactionsSnapshot.docs.forEach(doc => {
+                                const transaction = doc.data();
+                                let date = 'N/A';
+                                try {
+                                    date = transaction.timestamp?.toDate().toLocaleDateString();
+                                } catch (error) {
+                                    console.error('Error formatting transaction date:', error);
+                                }
+                                const typeClass = transaction.type === 'deposit' ? 'success' : 'warning';
+                                const typeIcon = transaction.type === 'deposit' ? 'plus' : 'minus';
+                                
+                                html += `
+                                    <div class="transaction-item">
+                                        <div class="transaction-icon ${typeClass}">
+                                            <i class="fas fa-${typeIcon}"></i>
+                                        </div>
+                                        <div class="transaction-info">
+                                            <h5>${transaction.type === 'deposit' ? 'Wallet Deposit' : 'Booking Payment'}</h5>
+                                            <p>${date} • ${transaction.paymentMethod || 'N/A'}</p>
+                                        </div>
+                                        <div class="transaction-amount ${typeClass}">
+                                            ${transaction.type === 'deposit' ? '+' : '-'}$${transaction.amount?.toFixed(2) || '0.00'}
+                                        </div>
+                                    </div>
+                                `;
+                            });
+                            html += '</div>';
+                            modalBody.innerHTML = html;
+                        }
+                    } catch (error) {
+                        console.error('Error loading transactions:', error);
+                        modalBody.innerHTML = `
+                            <div class="error-transactions">
+                                <i class="fas fa-exclamation-triangle"></i>
+                                <h4>No Transactions Available</h4>
+                                <p>Transaction history is not available at the moment</p>
+                            </div>
+                        `;
+                    }
+                } catch (error) {
+                    console.error('Error loading transactions:', error);
+                    const modalBody = document.querySelector('.modal-body');
+                    if (modalBody) {
+                        modalBody.innerHTML = `
+                            <div class="error-transactions">
+                                <i class="fas fa-exclamation-triangle"></i>
+                                <h4>Error Loading Transactions</h4>
+                                <p>Please try again later</p>
+                            </div>
+                        `;
+                    }
+                }
+            }
+
+            viewFavorites() {
+                this.showNotification('Favorite stations feature coming soon!', 'info');
+            }
+
+            exportHistory() {
+                this.showNotification('Export history feature coming soon!', 'info');
+            }
+
+            // Modal Methods
+            showModal(title, content, buttons) {
+                const modalTemplate = document.getElementById('modalTemplate');
+                const modal = modalTemplate.cloneNode(true);
+                modal.id = 'currentModal';
+                modal.classList.remove('hidden');
+                
+                // Set title
+                modal.querySelector('h3').textContent = title;
+                
+                // Set content
+                modal.querySelector('.modal-body').innerHTML = content;
+                
+                // Clear existing buttons and add new ones
+                const modalFooter = modal.querySelector('.modal-footer');
+                modalFooter.innerHTML = '';
+                
+                buttons.forEach(button => {
+                    const btn = document.createElement('button');
+                    btn.className = `btn-${button.type}`;
+                    btn.textContent = button.text;
+                    
+                    if (button.action === 'close') {
+                        btn.addEventListener('click', () => this.closeModal());
+                    } else {
+                        btn.addEventListener('click', button.action);
+                    }
+                    
+                    modalFooter.appendChild(btn);
+                });
+                
+                // Add close functionality
+                modal.querySelector('.close-modal').addEventListener('click', () => this.closeModal());
+                
+                // Add click outside to close
+                modal.addEventListener('click', (e) => {
+                    if (e.target === modal) {
+                        this.closeModal();
+                    }
+                });
+                
+                document.body.appendChild(modal);
+            }
+
+            closeModal() {
+                const modal = document.getElementById('currentModal');
+                if (modal) {
+                    modal.remove();
+                }
+            }
+
+            // Loading Methods
+            showLoading() {
+                const loadingOverlay = document.getElementById('loadingOverlay');
+                if (loadingOverlay) {
+                    loadingOverlay.style.display = 'flex';
+                }
+            }
+
+            hideLoading() {
+                const loadingOverlay = document.getElementById('loadingOverlay');
+                if (loadingOverlay) {
+                    loadingOverlay.style.display = 'none';
+                }
+            }
+
+            // Error Display Methods
+            showError(message) {
+                const errorContainer = document.getElementById('errorContainer');
+                if (errorContainer) {
+                    errorContainer.classList.remove('hidden');
+                    errorContainer.innerHTML = `
+                        <div class="error-message">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            <div>
+                                <strong>Error:</strong> ${message}
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+
+            clearError() {
+                const errorContainer = document.getElementById('errorContainer');
+                if (errorContainer) {
+                    errorContainer.classList.add('hidden');
+                    errorContainer.innerHTML = '';
+                }
+            }
+
+            // Notification Methods
+            showNotification(message, type = 'info') {
+                this.clearError();
+                
+                const container = document.getElementById('notificationContainer');
+                if (!container) return;
+                
+                const toast = document.createElement('div');
+                toast.className = `notification-toast ${type}`;
+                toast.innerHTML = `
+                    <div>
+                        <strong>${type.charAt(0).toUpperCase() + type.slice(1)}:</strong> ${message}
+                    </div>
+                    <button onclick="this.parentElement.remove()">&times;</button>
+                `;
+                
+                container.appendChild(toast);
+                
+                // Auto-remove after 5 seconds
+                setTimeout(() => {
+                    if (toast.parentElement) {
+                        toast.remove();
+                    }
+                }, 5000);
+            }
+
+            // Logout
+            logout() {
+                auth.signOut().then(() => {
+                    // Clean up real-time listeners
+                    this.realTimeListeners.forEach(unsubscribe => unsubscribe());
+                    this.realTimeListeners = [];
+                    
+                    window.location.href = 'index.html';
+                }).catch((error) => {
+                    console.error('Logout error:', error);
+                    this.showNotification('Logout failed: ' + error.message, 'error');
+                });
+            }
+        }
+
+        // Initialize UserManager when DOM is loaded
+        document.addEventListener('DOMContentLoaded', () => {
+            window.UserManager = UserManager.getInstance();
+        });
+    </script>
+</body>
+</html>

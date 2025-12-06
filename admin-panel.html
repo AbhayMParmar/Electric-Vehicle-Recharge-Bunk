@@ -1,0 +1,1428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel - EV Charging</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+    <script src="firebase-config.js"></script>
+    <style>
+        /* ========== CSS VARIABLES ========== */
+        :root {
+            --primary: #00a884;
+            --primary-dark: #008f75;
+            --secondary: #2d3748;
+            --light: #f7fafc;
+            --border: #e2e8f0;
+            --text: #4a5568;
+            --success: #48bb78;
+            --warning: #ed8936;
+            --danger: #f56565;
+            --radius: 8px;
+            --shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            --transition: all 0.3s ease;
+        }
+
+        /* ========== RESET & BASE ========== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--light);
+            color: var(--secondary);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        /* ========== ADMIN LAYOUT ========== */
+        .admin-container {
+            display: flex;
+            min-height: 100vh;
+            flex-direction: column;
+        }
+
+        /* ========== SIDEBAR ========== */
+        .sidebar {
+            width: 260px;
+            background: var(--secondary);
+            color: white;
+            position: fixed;
+            height: 100vh;
+            left: 0;
+            top: 0;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+        }
+
+        .sidebar-header {
+            padding: 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 600;
+            font-size: 1.2rem;
+        }
+
+        .logo i {
+            color: var(--primary);
+        }
+
+        .menu-toggle {
+            display: none;
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.2rem;
+            cursor: pointer;
+            padding: 0.5rem;
+        }
+
+        .admin-profile {
+            padding: 1.5rem;
+            text-align: center;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .profile-img {
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 1rem;
+            color: white;
+            font-size: 1.5rem;
+        }
+
+        .admin-profile h3 {
+            font-size: 1rem;
+            margin-bottom: 0.25rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .admin-profile p {
+            font-size: 0.8rem;
+            opacity: 0.8;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .admin-nav {
+            flex: 1;
+            padding: 1rem 0;
+            overflow-y: auto;
+        }
+
+        .admin-nav::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .admin-nav::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.2);
+            border-radius: 4px;
+        }
+
+        .admin-nav ul {
+            list-style: none;
+        }
+
+        .admin-nav li {
+            margin-bottom: 0.25rem;
+        }
+
+        .nav-link {
+            display: flex;
+            align-items: center;
+            padding: 0.85rem 1.5rem;
+            color: rgba(255,255,255,0.8);
+            text-decoration: none;
+            transition: var(--transition);
+            border-left: 3px solid transparent;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .nav-link:hover,
+        .nav-link.active {
+            background: rgba(255,255,255,0.05);
+            color: white;
+            border-left-color: var(--primary);
+        }
+
+        .nav-link i {
+            width: 20px;
+            margin-right: 12px;
+            font-size: 1rem;
+            text-align: center;
+        }
+
+        .nav-text {
+            transition: opacity 0.3s ease;
+        }
+
+        .logout-btn {
+            margin: 1rem;
+            padding: 0.85rem;
+            background: rgba(229, 62, 62, 0.1);
+            border: 1px solid rgba(229, 62, 62, 0.3);
+            color: #fc8181;
+            border-radius: var(--radius);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: var(--transition);
+            white-space: nowrap;
+        }
+
+        .logout-btn:hover {
+            background: #e53e3e;
+            color: white;
+            border-color: #e53e3e;
+        }
+
+        .sidebar-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 999;
+        }
+
+        /* ========== MAIN CONTENT ========== */
+        .main-content {
+            flex: 1;
+            margin-left: 260px;
+            min-height: 100vh;
+            transition: margin-left 0.3s ease;
+        }
+
+        /* Header */
+        .admin-header {
+            background: white;
+            padding: 1rem 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: var(--shadow);
+            position: sticky;
+            top: 0;
+            z-index: 900;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .mobile-menu-btn {
+            display: none;
+            background: none;
+            border: none;
+            color: var(--secondary);
+            font-size: 1.2rem;
+            cursor: pointer;
+            padding: 0.5rem;
+        }
+
+        .admin-header h1 {
+            font-size: 1.3rem;
+            color: var(--secondary);
+            font-weight: 600;
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .date-display {
+            font-size: 0.85rem;
+            color: var(--text);
+            white-space: nowrap;
+        }
+
+        /* ========== DASHBOARD ========== */
+        .dashboard-section {
+            padding: 1.5rem;
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            text-align: center;
+            transition: var(--transition);
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+        }
+
+        .stat-card:active {
+            transform: translateY(-1px);
+        }
+
+        .stat-card::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: var(--primary);
+            transform: scaleX(0);
+            transition: transform 0.3s ease;
+        }
+
+        .stat-card:hover::after {
+            transform: scaleX(1);
+        }
+
+        .stat-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 0.75rem;
+            color: white;
+            font-size: 1.25rem;
+        }
+
+        .stat-icon.blue { background: linear-gradient(135deg, #4299e1, #3182ce); }
+        .stat-icon.orange { background: linear-gradient(135deg, var(--warning), #dd6b20); }
+        .stat-icon.green { background: linear-gradient(135deg, var(--success), #38a169); }
+
+        .stat-card h3 {
+            font-size: 1.75rem;
+            margin-bottom: 0.25rem;
+            color: var(--secondary);
+            font-weight: 700;
+        }
+
+        .stat-card p {
+            color: var(--text);
+            font-size: 0.85rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-card .view-link {
+            display: inline-block;
+            font-size: 0.8rem;
+            color: var(--primary);
+            text-decoration: none;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .stat-card:hover .view-link {
+            opacity: 1;
+        }
+
+        /* Forms */
+        .form-card {
+            background: white;
+            border-radius: var(--radius);
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: var(--shadow);
+        }
+
+        .form-card h2 {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 1.25rem;
+            color: var(--secondary);
+            font-size: 1.25rem;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--secondary);
+            font-weight: 500;
+            font-size: 0.9rem;
+        }
+
+        .form-group.required label::after {
+            content: " *";
+            color: var(--danger);
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            font-size: 0.9rem;
+            transition: var(--transition);
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(0, 168, 132, 0.1);
+        }
+
+        .btn {
+            padding: 0.85rem 1.5rem;
+            border: none;
+            border-radius: var(--radius);
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: var(--transition);
+            white-space: nowrap;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white;
+            width: 100%;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 168, 132, 0.3);
+        }
+
+        /* Table */
+        .table-container {
+            background: white;
+            border-radius: var(--radius);
+            padding: 1.5rem;
+            box-shadow: var(--shadow);
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .table-container h2 {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 1.25rem;
+            color: var(--secondary);
+            font-size: 1.25rem;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 700px;
+        }
+
+        thead {
+            background: var(--secondary);
+            color: white;
+        }
+
+        th {
+            padding: 0.85rem 1rem;
+            text-align: left;
+            font-weight: 500;
+            font-size: 0.9rem;
+            white-space: nowrap;
+        }
+
+        td {
+            padding: 0.85rem 1rem;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.9rem;
+        }
+
+        tbody tr:hover {
+            background: #f8fafc;
+        }
+
+        /* Badges */
+        .badge {
+            display: inline-block;
+            padding: 0.3rem 0.65rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            white-space: nowrap;
+        }
+
+        .badge-success {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+
+        .badge-danger {
+            background: #fed7d7;
+            color: #742a2a;
+        }
+
+        .badge-info {
+            background: #bee3f8;
+            color: #2c5282;
+        }
+
+        /* Action Buttons */
+        .action-buttons {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .btn-sm {
+            padding: 0.45rem 0.75rem;
+            font-size: 0.8rem;
+        }
+
+        .btn-edit {
+            background: #bee3f8;
+            color: #2c5282;
+        }
+
+        .btn-delete {
+            background: #fed7d7;
+            color: #742a2a;
+        }
+
+        .btn-edit:hover {
+            background: #90cdf4;
+        }
+
+        .btn-delete:hover {
+            background: #fc8181;
+        }
+
+        /* User Management Section */
+        .users-section .table-container {
+            margin-top: 1rem;
+        }
+
+        .user-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            font-size: 0.9rem;
+            margin-right: 10px;
+            flex-shrink: 0;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+        }
+
+        /* Bookings Section */
+        .bookings-section .table-container {
+            margin-top: 1rem;
+        }
+
+        /* Reports Section */
+        .reports-section {
+            padding: 1.5rem;
+        }
+
+        .reports-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+            margin-top: 1.25rem;
+        }
+
+        .report-card {
+            background: white;
+            padding: 1.25rem;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+        }
+
+        .report-card h3 {
+            margin-bottom: 0.75rem;
+            color: var(--secondary);
+            font-size: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .report-card h2 {
+            font-size: 1.75rem;
+            color: var(--secondary);
+            margin-bottom: 0.5rem;
+        }
+
+        .report-card p {
+            color: var(--text);
+            font-size: 0.85rem;
+        }
+
+        /* Empty States */
+        .empty-state {
+            text-align: center;
+            padding: 2rem 1rem;
+            color: var(--text);
+        }
+
+        .empty-state i {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+            color: #cbd5e0;
+        }
+
+        .empty-state h3 {
+            font-size: 1.1rem;
+            margin-bottom: 0.5rem;
+            color: var(--secondary);
+        }
+
+        .empty-state p {
+            font-size: 0.9rem;
+            max-width: 300px;
+            margin: 0 auto;
+        }
+
+        /* ========== UTILITIES ========== */
+        .hidden { display: none !important; }
+        .text-center { text-align: center; }
+        .text-muted { color: var(--text); opacity: 0.7; }
+        .mb-2 { margin-bottom: 0.5rem; }
+        .mb-3 { margin-bottom: 1rem; }
+        .mb-4 { margin-bottom: 1.5rem; }
+
+        /* ========== NOTIFICATIONS ========== */
+        .notification-toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 1rem 1.25rem;
+            border-radius: var(--radius);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            min-width: 280px;
+            max-width: 90%;
+            z-index: 1100;
+            animation: slideIn 0.3s ease;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .notification-toast.success {
+            background: linear-gradient(135deg, var(--success), #38a169);
+        }
+
+        .notification-toast.error {
+            background: linear-gradient(135deg, var(--danger), #e53e3e);
+        }
+
+        .notification-toast.warning {
+            background: linear-gradient(135deg, var(--warning), #dd6b20);
+        }
+
+        .notification-toast.info {
+            background: linear-gradient(135deg, #4299e1, #3182ce);
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        /* ========== LOADING ========== */
+        .loading {
+            opacity: 0.7;
+            pointer-events: none;
+            position: relative;
+        }
+
+        .loading::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: -10px 0 0 -10px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* ========== RESPONSIVE DESIGN ========== */
+        
+        /* Large Tablets and Small Laptops (1024px and below) */
+        @media (max-width: 1024px) {
+            .sidebar {
+                width: 230px;
+            }
+            
+            .main-content {
+                margin-left: 230px;
+            }
+            
+            .stats-grid {
+                grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            }
+            
+            .form-row {
+                grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            }
+        }
+
+        /* Tablets (768px and below) */
+        @media (max-width: 768px) {
+            .sidebar {
+                transform: translateX(-100%);
+                width: 280px;
+            }
+            
+            .sidebar.active {
+                transform: translateX(0);
+            }
+            
+            .sidebar-overlay.active {
+                display: block;
+            }
+            
+            .main-content {
+                margin-left: 0;
+            }
+            
+            .mobile-menu-btn {
+                display: block;
+            }
+            
+            .menu-toggle {
+                display: block;
+            }
+            
+            .admin-header {
+                padding: 1rem;
+            }
+            
+            .admin-header h1 {
+                font-size: 1.2rem;
+            }
+            
+            .dashboard-section {
+                padding: 1rem;
+            }
+            
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .form-card,
+            .table-container {
+                padding: 1.25rem;
+            }
+            
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+            
+            .reports-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            table {
+                min-width: 600px;
+            }
+            
+            .nav-text {
+                opacity: 1;
+            }
+            
+            .profile-img {
+                width: 60px;
+                height: 60px;
+                font-size: 1.25rem;
+            }
+        }
+
+        /* Large Phones (576px and below) */
+        @media (max-width: 576px) {
+            .admin-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 0.75rem;
+            }
+            
+            .header-left {
+                width: 100%;
+                justify-content: space-between;
+            }
+            
+            .header-actions {
+                width: 100%;
+                justify-content: space-between;
+            }
+            
+            .date-display {
+                font-size: 0.8rem;
+            }
+            
+            .stat-card {
+                padding: 1.25rem;
+            }
+            
+            .stat-card h3 {
+                font-size: 1.5rem;
+            }
+            
+            .form-card h2,
+            .table-container h2 {
+                font-size: 1.1rem;
+            }
+            
+            .btn {
+                padding: 0.75rem 1.25rem;
+                font-size: 0.85rem;
+            }
+            
+            .action-buttons {
+                flex-direction: column;
+                gap: 0.25rem;
+            }
+            
+            .btn-sm {
+                width: 100%;
+                justify-content: center;
+            }
+            
+            .notification-toast {
+                min-width: calc(100% - 40px);
+                max-width: calc(100% - 40px);
+                right: 20px;
+                left: 20px;
+            }
+            
+            .empty-state i {
+                font-size: 2rem;
+            }
+            
+            .empty-state h3 {
+                font-size: 1rem;
+            }
+            
+            .empty-state p {
+                font-size: 0.85rem;
+            }
+        }
+
+        /* Small Phones (400px and below) */
+        @media (max-width: 400px) {
+            .sidebar {
+                width: 100%;
+            }
+            
+            .admin-profile h3 {
+                font-size: 0.9rem;
+            }
+            
+            .admin-profile p {
+                font-size: 0.75rem;
+            }
+            
+            .nav-link {
+                padding: 0.75rem 1rem;
+            }
+            
+            .logout-btn {
+                margin: 0.75rem;
+                padding: 0.75rem;
+                font-size: 0.85rem;
+            }
+            
+            .stat-icon {
+                width: 45px;
+                height: 45px;
+                font-size: 1.1rem;
+            }
+            
+            .stat-card h3 {
+                font-size: 1.35rem;
+            }
+            
+            .stat-card p {
+                font-size: 0.8rem;
+            }
+            
+            .form-control {
+                padding: 0.65rem 0.85rem;
+                font-size: 0.85rem;
+            }
+            
+            th, td {
+                padding: 0.75rem 0.85rem;
+                font-size: 0.85rem;
+            }
+            
+            .user-avatar {
+                width: 32px;
+                height: 32px;
+                font-size: 0.8rem;
+                margin-right: 8px;
+            }
+            
+            .report-card {
+                padding: 1rem;
+            }
+            
+            .report-card h2 {
+                font-size: 1.5rem;
+            }
+        }
+
+        /* Very Small Phones (320px and below) */
+        @media (max-width: 320px) {
+            .dashboard-section {
+                padding: 0.75rem;
+            }
+            
+            .form-card,
+            .table-container {
+                padding: 1rem;
+            }
+            
+            .stat-card {
+                padding: 1rem;
+            }
+            
+            .btn {
+                padding: 0.65rem 1rem;
+                font-size: 0.8rem;
+            }
+            
+            .form-card h2,
+            .table-container h2 {
+                font-size: 1rem;
+            }
+            
+            .nav-link i {
+                margin-right: 8px;
+                font-size: 0.9rem;
+            }
+        }
+
+        /* Landscape Mode */
+        @media (max-height: 600px) and (orientation: landscape) {
+            .sidebar {
+                overflow-y: auto;
+            }
+            
+            .admin-profile {
+                padding: 1rem;
+            }
+            
+            .profile-img {
+                width: 50px;
+                height: 50px;
+                font-size: 1rem;
+                margin-bottom: 0.5rem;
+            }
+            
+            .admin-profile h3 {
+                font-size: 0.9rem;
+                margin-bottom: 0.25rem;
+            }
+            
+            .admin-profile p {
+                font-size: 0.75rem;
+            }
+            
+            .admin-nav {
+                padding: 0.5rem 0;
+            }
+            
+            .nav-link {
+                padding: 0.6rem 1rem;
+                font-size: 0.9rem;
+            }
+            
+            .logout-btn {
+                margin: 0.5rem;
+                padding: 0.6rem;
+                font-size: 0.85rem;
+            }
+        }
+
+        /* High Resolution Screens */
+        @media (min-width: 1400px) {
+            .sidebar {
+                width: 280px;
+            }
+            
+            .main-content {
+                margin-left: 280px;
+            }
+            
+            .stats-grid {
+                grid-template-columns: repeat(4, 1fr);
+            }
+            
+            .form-row {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .reports-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+
+        /* Print Styles */
+        @media print {
+            .sidebar,
+            .mobile-menu-btn,
+            .logout-btn,
+            .btn-edit,
+            .btn-delete {
+                display: none !important;
+            }
+            
+            .main-content {
+                margin-left: 0;
+            }
+            
+            .admin-header {
+                box-shadow: none;
+                border-bottom: 1px solid #ddd;
+            }
+            
+            .stat-card {
+                break-inside: avoid;
+                box-shadow: none;
+                border: 1px solid #ddd;
+            }
+            
+            .table-container {
+                box-shadow: none;
+                border: 1px solid #ddd;
+            }
+            
+            .notification-toast {
+                display: none !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Sidebar Overlay -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="logo">
+                <i class="fas fa-bolt"></i>
+                <span class="nav-text">EVCharge Admin</span>
+            </div>
+            <button class="menu-toggle" id="menuToggle">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        
+        <div class="admin-profile">
+            <div class="profile-img">
+                <i class="fas fa-user-cog"></i>
+            </div>
+            <h3 id="adminName">Admin User</h3>
+            <p id="adminEmail">admin@evcharge.com</p>
+        </div>
+        
+        <nav class="admin-nav">
+            <ul>
+                <li><a href="#dashboard" class="nav-link active">
+                    <i class="fas fa-tachometer-alt"></i>
+                    <span class="nav-text">Dashboard</span>
+                </a></li>
+                <li><a href="#stations" class="nav-link">
+                    <i class="fas fa-charging-station"></i>
+                    <span class="nav-text">Stations</span>
+                </a></li>
+                <li><a href="#bookings" class="nav-link">
+                    <i class="fas fa-book"></i>
+                    <span class="nav-text">Bookings</span>
+                </a></li>
+                <li><a href="#users" class="nav-link">
+                    <i class="fas fa-users"></i>
+                    <span class="nav-text">Users</span>
+                </a></li>
+                <li><a href="#reports" class="nav-link">
+                    <i class="fas fa-chart-bar"></i>
+                    <span class="nav-text">Reports</span>
+                </a></li>
+            </ul>
+        </nav>
+        
+        <button id="logoutBtn" class="logout-btn">
+            <i class="fas fa-sign-out-alt"></i>
+            <span class="nav-text">Logout</span>
+        </button>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <header class="admin-header">
+            <div class="header-left">
+                <button class="mobile-menu-btn" id="mobileMenuBtn">
+                    <i class="fas fa-bars"></i>
+                </button>
+                <h1 id="pageTitle">Admin Dashboard</h1>
+            </div>
+            <div class="header-actions">
+                <div class="date-display" id="currentDate"></div>
+            </div>
+        </header>
+
+        <!-- Dashboard Section -->
+        <section id="dashboard" class="dashboard-section">
+            <!-- Stats -->
+            <div class="stats-grid">
+                <div class="stat-card" id="statStations" data-target="#stations">
+                    <div class="stat-icon">
+                        <i class="fas fa-charging-station"></i>
+                    </div>
+                    <h3 id="totalStations">0</h3>
+                    <p>Total Stations</p>
+                    <div class="view-link">View All →</div>
+                </div>
+                <div class="stat-card" id="statBookings" data-target="#bookings">
+                    <div class="stat-icon blue">
+                        <i class="fas fa-book"></i>
+                    </div>
+                    <h3 id="activeBookings">0</h3>
+                    <p>Active Bookings</p>
+                    <div class="view-link">View All →</div>
+                </div>
+                <div class="stat-card" id="statUsers" data-target="#users">
+                    <div class="stat-icon orange">
+                        <i class="fas fa-users"></i>
+                    </div>
+                    <h3 id="totalUsers">0</h3>
+                    <p>Total Users</p>
+                    <div class="view-link">View All →</div>
+                </div>
+                <div class="stat-card" id="statRevenue" data-target="#reports">
+                    <div class="stat-icon green">
+                        <i class="fas fa-dollar-sign"></i>
+                    </div>
+                    <h3 id="totalRevenue">$0.00</h3>
+                    <p>Total Revenue</p>
+                    <div class="view-link">View Reports →</div>
+                </div>
+            </div>
+
+            <!-- Add Station Form -->
+            <div class="form-card">
+                <h2><i class="fas fa-plus-circle"></i> Add New Charging Station</h2>
+                <form id="addStationForm">
+                    <div class="form-row">
+                        <div class="form-group required">
+                            <label for="stationName">Station Name</label>
+                            <input type="text" id="stationName" class="form-control" required 
+                                   placeholder="e.g., EV Charging Center">
+                        </div>
+                        <div class="form-group required">
+                            <label for="stationAddress">Address</label>
+                            <input type="text" id="stationAddress" class="form-control" required 
+                                   placeholder="e.g., 123 Main Street">
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group required">
+                            <label for="stationCity">City</label>
+                            <input type="text" id="stationCity" class="form-control" required 
+                                   placeholder="e.g., New York">
+                        </div>
+                        <div class="form-group required">
+                            <label for="stationState">State</label>
+                            <input type="text" id="stationState" class="form-control" required 
+                                   placeholder="e.g., NY">
+                        </div>
+                        <div class="form-group required">
+                            <label for="stationZip">Zip Code</label>
+                            <input type="text" id="stationZip" class="form-control" required 
+                                   placeholder="e.g., 10001">
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group required">
+                            <label for="contactNumber">Contact Number</label>
+                            <input type="tel" id="contactNumber" class="form-control" required 
+                                   placeholder="e.g., (123) 456-7890">
+                        </div>
+                        <div class="form-group required">
+                            <label for="chargerType">Charger Type</label>
+                            <select id="chargerType" class="form-control" required>
+                                <option value="">Select Type</option>
+                                <option value="fast">Fast Charging (DC)</option>
+                                <option value="normal">Normal Charging (AC)</option>
+                                <option value="both">Both Types</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group required">
+                            <label for="totalSlots">Total Slots</label>
+                            <input type="number" id="totalSlots" class="form-control" required 
+                                   min="1" max="50" placeholder="e.g., 10">
+                        </div>
+                        <div class="form-group required">
+                            <label for="pricePerHour">Price per Hour ($)</label>
+                            <input type="number" id="pricePerHour" class="form-control" required 
+                                   step="0.01" min="0" placeholder="e.g., 5.00">
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="stationImage">Station Image URL (Optional)</label>
+                        <input type="url" id="stationImage" class="form-control" 
+                               placeholder="https://example.com/image.jpg">
+                        <small class="text-muted">You can use image URLs from the web</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="stationDescription">Description (Optional)</label>
+                        <textarea id="stationDescription" class="form-control" rows="3" 
+                                  placeholder="Describe this charging station..."></textarea>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> Add Station
+                    </button>
+                </form>
+            </div>
+        </section>
+
+        <!-- Stations Section -->
+        <section id="stations" class="dashboard-section hidden">
+            <div class="table-container">
+                <h2><i class="fas fa-charging-station"></i> All Charging Stations</h2>
+                <div style="overflow-x: auto;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Station Name</th>
+                                <th>Location</th>
+                                <th>Slots</th>
+                                <th>Type</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="stationsTableBody">
+                            <tr>
+                                <td colspan="6" class="text-center">
+                                    <div class="empty-state">
+                                        <i class="fas fa-charging-station"></i>
+                                        <h3>No Stations Yet</h3>
+                                        <p class="text-muted">Add your first charging station above</p>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- Bookings Section -->
+        <section id="bookings" class="dashboard-section hidden">
+            <div class="table-container">
+                <h2><i class="fas fa-book"></i> All Bookings</h2>
+                <div style="overflow-x: auto;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Booking ID</th>
+                                <th>User</th>
+                                <th>Station</th>
+                                <th>Date & Time</th>
+                                <th>Duration</th>
+                                <th>Amount</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="bookingsTableBody">
+                            <tr>
+                                <td colspan="7" class="text-center">
+                                    <div class="empty-state">
+                                        <i class="fas fa-book"></i>
+                                        <h3>No Active Bookings</h3>
+                                        <p class="text-muted">All bookings will appear here</p>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- Users Section -->
+        <section id="users" class="dashboard-section hidden">
+            <div class="table-container">
+                <h2><i class="fas fa-users"></i> All Users</h2>
+                <div style="overflow-x: auto;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>User</th>
+                                <th>Email</th>
+                                <th>Phone</th>
+                                <th>Joined</th>
+                                <th>Total Bookings</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usersTableBody">
+                            <tr>
+                                <td colspan="6" class="text-center">
+                                    <div class="empty-state">
+                                        <i class="fas fa-users"></i>
+                                        <h3>No Users Found</h3>
+                                        <p class="text-muted">User data will appear here</p>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- Reports Section -->
+        <section id="reports" class="dashboard-section hidden">
+            <div class="form-card">
+                <h2><i class="fas fa-chart-bar"></i> Revenue Reports</h2>
+                <div class="reports-grid">
+                    <div class="report-card">
+                        <h3><i class="fas fa-calendar-alt"></i> Today's Revenue</h3>
+                        <h2 id="todayRevenue">$0.00</h2>
+                        <p class="text-muted">Total revenue generated today</p>
+                    </div>
+                    <div class="report-card">
+                        <h3><i class="fas fa-calendar-week"></i> This Week</h3>
+                        <h2 id="weekRevenue">$0.00</h2>
+                        <p class="text-muted">Revenue for current week</p>
+                    </div>
+                    <div class="report-card">
+                        <h3><i class="fas fa-calendar-month"></i> This Month</h3>
+                        <h2 id="monthRevenue">$0.00</h2>
+                        <p class="text-muted">Revenue for current month</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="table-container">
+                <h2><i class="fas fa-history"></i> Recent Transactions</h2>
+                <div style="overflow-x: auto;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Transaction ID</th>
+                                <th>Date</th>
+                                <th>User</th>
+                                <th>Amount</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="transactionsTableBody">
+                            <tr>
+                                <td colspan="5" class="text-center">
+                                    <div class="empty-state">
+                                        <i class="fas fa-receipt"></i>
+                                        <h3>No Transactions</h3>
+                                        <p class="text-muted">Transaction history will appear here</p>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="admin.js"></script>
+</body>
+</html>
