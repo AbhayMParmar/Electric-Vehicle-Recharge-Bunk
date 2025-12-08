@@ -10,11 +10,13 @@ class AdminManager {
             month: 0
         };
         this.isMobileMenuOpen = false;
+        this.db = null; // Add db reference
         this.init();
     }
 
     async init() {
         try {
+            await this.initializeFirebase(); // Initialize Firebase first
             await this.checkAuth();
             this.setupEventListeners();
             this.updateCurrentDate();
@@ -25,6 +27,29 @@ class AdminManager {
         } catch (error) {
             console.error('Admin initialization error:', error);
             this.showNotification('Failed to initialize. Please refresh.', 'error');
+        }
+    }
+
+    async initializeFirebase() {
+        try {
+            // Check if Firebase is already initialized
+            if (!firebase.apps.length) {
+                // Initialize Firebase with config
+                firebase.initializeApp({
+                    apiKey: "YOUR_API_KEY",
+                    authDomain: "YOUR_AUTH_DOMAIN",
+                    projectId: "YOUR_PROJECT_ID",
+                    storageBucket: "YOUR_STORAGE_BUCKET",
+                    messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+                    appId: "YOUR_APP_ID"
+                });
+            }
+            
+            this.db = firebase.firestore();
+            console.log('Firebase initialized successfully');
+        } catch (error) {
+            console.error('Firebase initialization error:', error);
+            throw new Error('Failed to initialize Firebase');
         }
     }
 
@@ -60,15 +85,6 @@ class AdminManager {
         // Close menu when clicking navigation links on mobile
         document.querySelectorAll('.nav-link').forEach(link => {
             link.addEventListener('click', () => {
-                if (window.innerWidth <= 768) {
-                    toggleMenu();
-                }
-            });
-        });
-        
-        // Close menu when clicking stats cards on mobile
-        document.querySelectorAll('.stat-card').forEach(card => {
-            card.addEventListener('click', () => {
                 if (window.innerWidth <= 768) {
                     toggleMenu();
                 }
@@ -238,56 +254,110 @@ class AdminManager {
         try {
             console.log('Setting up real-time listeners...');
             
-            // Listen for stations
-            if (window.db) {
-                db.collection('stations').where('isActive', '==', true)
-                    .onSnapshot((snapshot) => {
-                        console.log('Stations updated:', snapshot.size);
-                        this.stations = [];
-                        snapshot.forEach(doc => {
-                            this.stations.push({ id: doc.id, ...doc.data() });
-                        });
-                        this.updateStationsTable();
-                        this.updateStats();
-                    }, (error) => {
-                        console.error('Stations listener error:', error);
-                    });
-
-                // Listen for bookings
-                db.collection('bookings').where('status', '==', 'active')
-                    .onSnapshot((snapshot) => {
-                        console.log('Bookings updated:', snapshot.size);
-                        this.bookings = [];
-                        snapshot.forEach(doc => {
-                            this.bookings.push({ id: doc.id, ...doc.data() });
-                        });
-                        this.updateStats();
-                        this.updateBookingsTable();
-                    });
-
-                // Listen for users
-                db.collection('users')
-                    .onSnapshot((snapshot) => {
-                        console.log('Users updated:', snapshot.size);
-                        this.users = [];
-                        snapshot.forEach(doc => {
-                            this.users.push({ id: doc.id, ...doc.data() });
-                        });
-                        this.updateStats();
-                        this.updateUsersTable();
-                    });
-
-            } else {
+            if (!this.db) {
                 console.error('Firestore db not available');
+                this.showNotification('Database connection failed', 'error');
+                return;
             }
+
+            // Listen for stations
+            this.db.collection('stations').where('isActive', '==', true)
+                .onSnapshot(async (snapshot) => {
+                    console.log('Stations updated:', snapshot.size);
+                    this.stations = [];
+                    for (const doc of snapshot.docs) {
+                        const station = { id: doc.id, ...doc.data() };
+                        // Calculate available slots dynamically
+                        station.availableSlots = await this.calculateAvailableSlots(doc.id);
+                        this.stations.push(station);
+                    }
+                    this.updateStationsTable();
+                    this.updateStats();
+                }, (error) => {
+                    console.error('Stations listener error:', error);
+                });
+
+            // Listen for bookings
+            this.db.collection('bookings').where('status', '==', 'active')
+                .onSnapshot((snapshot) => {
+                    console.log('Bookings updated:', snapshot.size);
+                    this.bookings = [];
+                    snapshot.forEach(doc => {
+                        this.bookings.push({ id: doc.id, ...doc.data() });
+                    });
+                    this.updateStats();
+                    this.updateBookingsTable();
+                });
+
+            // Listen for users
+            this.db.collection('users')
+                .onSnapshot((snapshot) => {
+                    console.log('Users updated:', snapshot.size);
+                    this.users = [];
+                    snapshot.forEach(doc => {
+                        this.users.push({ id: doc.id, ...doc.data() });
+                    });
+                    this.updateStats();
+                    this.updateUsersTable();
+                });
 
         } catch (error) {
             console.error('Real-time listener setup error:', error);
         }
     }
 
+    async calculateAvailableSlots(stationId) {
+        try {
+            // Get station document
+            const stationDoc = await this.db.collection('stations').doc(stationId).get();
+            if (!stationDoc.exists) return 0;
+            
+            const station = stationDoc.data();
+            const totalSlots = station.totalSlots || 0;
+            
+            // Get current time
+            const now = new Date();
+            
+            // Get all active bookings for this station
+            const bookingsSnapshot = await this.db.collection('bookings')
+                .where('stationId', '==', stationId)
+                .where('status', 'in', ['pending', 'confirmed', 'active'])
+                .get();
+            
+            let bookedSlots = 0;
+            
+            // Check each booking if it overlaps with current time
+            bookingsSnapshot.forEach(doc => {
+                const booking = doc.data();
+                const startTime = booking.startTime?.toDate();
+                const endTime = booking.endTime?.toDate();
+                
+                // If booking times exist and current time is within booking period
+                if (startTime && endTime) {
+                    if (now >= startTime && now <= endTime) {
+                        bookedSlots++;
+                    }
+                }
+            });
+            
+            // Calculate available slots
+            const availableSlots = Math.max(0, totalSlots - bookedSlots);
+            
+            return availableSlots;
+            
+        } catch (error) {
+            console.error('Error calculating available slots:', error);
+            return 0;
+        }
+    }
+
     async handleAddStation(e) {
         console.log('handleAddStation called');
+        
+        if (!this.db) {
+            this.showNotification('Database not connected', 'error');
+            return;
+        }
         
         try {
             // Get form values
@@ -304,7 +374,7 @@ class AdminManager {
                 description: this.getValue('stationDescription'),
                 imageUrl: this.getValue('stationImage'),
                 isActive: true,
-                availableSlots: this.getNumberValue('totalSlots'),
+                // Note: We don't store availableSlots here - it's calculated dynamically
                 createdAt: new Date().toISOString(),
                 createdBy: 'admin'
             };
@@ -325,10 +395,10 @@ class AdminManager {
 
                 try {
                     // Save to Firestore
-                    await db.collection('stations').add(formData);
+                    await this.db.collection('stations').add(formData);
                     
                     // Success
-                    this.showNotification('Station added successfully!', 'success');
+                    this.showNotification('Station added successfully! All slots are initially available.', 'success');
                     document.getElementById('addStationForm').reset();
                     
                 } finally {
@@ -413,6 +483,20 @@ class AdminManager {
             const createdDate = station.createdAt ? 
                 new Date(station.createdAt).toLocaleDateString() : 'Recent';
             
+            // Get available slots (calculated dynamically)
+            const availableSlots = station.availableSlots || 0;
+            const totalSlots = station.totalSlots || 0;
+            
+            // Determine status based on available slots
+            let statusBadge = '';
+            if (availableSlots === 0) {
+                statusBadge = '<span class="badge badge-danger">Full</span>';
+            } else if (availableSlots <= 2) {
+                statusBadge = '<span class="badge badge-warning">Limited</span>';
+            } else {
+                statusBadge = '<span class="badge badge-success">Available</span>';
+            }
+            
             // Truncate description for mobile
             const description = station.description ? 
                 (station.description.length > 50 ? station.description.substring(0, 50) + '...' : station.description) : '';
@@ -429,11 +513,11 @@ class AdminManager {
                         <small class="text-muted">${station.city || ''}, ${station.state || ''}</small>
                     </td>
                     <td>
-                        <strong>${station.availableSlots || 0}/${station.totalSlots || 0}</strong><br>
+                        <strong>${availableSlots}/${totalSlots}</strong><br>
                         <small class="text-muted">Available/Total</small>
                     </td>
                     <td><span class="badge badge-info">${typeText}</span></td>
-                    <td><span class="badge badge-success">Active</span></td>
+                    <td>${statusBadge}</td>
                     <td>
                         <div class="action-buttons">
                             <button class="btn btn-sm btn-edit" onclick="adminManager.editStation('${station.id}')">
@@ -595,9 +679,6 @@ class AdminManager {
             const todayEnd = new Date(today);
             todayEnd.setHours(23, 59, 59, 999);
             
-            // For demo purposes, we'll calculate from existing bookings
-            // In a real app, you would query Firestore with date filters
-            
             const todayRevenue = this.bookings.reduce((total, booking) => {
                 const bookingDate = booking.createdAt ? new Date(booking.createdAt) : new Date();
                 if (bookingDate >= today && bookingDate <= todayEnd) {
@@ -631,9 +712,13 @@ class AdminManager {
             }, 0);
             
             // Update report cards
-            document.getElementById('todayRevenue').textContent = `$${todayRevenue.toFixed(2)}`;
-            document.getElementById('weekRevenue').textContent = `$${weekRevenue.toFixed(2)}`;
-            document.getElementById('monthRevenue').textContent = `$${monthRevenue.toFixed(2)}`;
+            const todayEl = document.getElementById('todayRevenue');
+            const weekEl = document.getElementById('weekRevenue');
+            const monthEl = document.getElementById('monthRevenue');
+            
+            if (todayEl) todayEl.textContent = `$${todayRevenue.toFixed(2)}`;
+            if (weekEl) weekEl.textContent = `$${weekRevenue.toFixed(2)}`;
+            if (monthEl) monthEl.textContent = `$${monthRevenue.toFixed(2)}`;
             
             // Update transactions table
             this.updateTransactionsTable();
@@ -753,6 +838,11 @@ class AdminManager {
     async handleUpdateStation(e, stationId) {
         console.log('Updating station:', stationId);
         
+        if (!this.db) {
+            this.showNotification('Database not connected', 'error');
+            return;
+        }
+        
         try {
             // Get updated data
             const updatedData = {
@@ -786,7 +876,7 @@ class AdminManager {
 
                 try {
                     // Update in Firestore
-                    await db.collection('stations').doc(stationId).update(updatedData);
+                    await this.db.collection('stations').doc(stationId).update(updatedData);
                     
                     this.showNotification('Station updated successfully!', 'success');
                     
@@ -827,9 +917,14 @@ class AdminManager {
             return;
         }
 
+        if (!this.db) {
+            this.showNotification('Database not connected', 'error');
+            return;
+        }
+
         try {
             // Soft delete
-            await db.collection('stations').doc(stationId).update({
+            await this.db.collection('stations').doc(stationId).update({
                 isActive: false,
                 deletedAt: new Date().toISOString()
             });
@@ -868,22 +963,26 @@ class AdminManager {
         try {
             console.log('Loading dashboard data...');
             
-            if (!window.db) {
+            if (!this.db) {
                 console.error('Firestore not available');
+                this.showNotification('Database connection failed', 'error');
                 return;
             }
 
             // Load initial data
             const [stationsSnapshot, bookingsSnapshot, usersSnapshot] = await Promise.all([
-                db.collection('stations').where('isActive', '==', true).get(),
-                db.collection('bookings').where('status', '==', 'active').get(),
-                db.collection('users').get()
+                this.db.collection('stations').where('isActive', '==', true).get(),
+                this.db.collection('bookings').where('status', '==', 'active').get(),
+                this.db.collection('users').get()
             ]);
 
             this.stations = [];
-            stationsSnapshot.forEach(doc => {
-                this.stations.push({ id: doc.id, ...doc.data() });
-            });
+            for (const doc of stationsSnapshot.docs) {
+                const station = { id: doc.id, ...doc.data() };
+                // Calculate available slots dynamically
+                station.availableSlots = await this.calculateAvailableSlots(doc.id);
+                this.stations.push(station);
+            }
 
             this.bookings = [];
             bookingsSnapshot.forEach(doc => {
