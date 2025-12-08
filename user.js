@@ -1,3 +1,4 @@
+// user.js - User Manager Class
 class UserManager {
     constructor() {
         this.currentUser = null;
@@ -6,6 +7,7 @@ class UserManager {
         this.userLocation = null;
         this.map = null;
         this.markers = [];
+        this.realTimeListeners = [];
         
         this.init();
     }
@@ -20,9 +22,10 @@ class UserManager {
 
     async checkUserAuth() {
         return new Promise((resolve, reject) => {
-            auth.onAuthStateChanged(async (user) => {
+            firebase.auth().onAuthStateChanged(async (user) => {
                 if (user) {
                     try {
+                        const db = firebase.firestore();
                         const userDoc = await db.collection('users').doc(user.uid).get();
                         const userData = userDoc.data();
                         
@@ -31,14 +34,14 @@ class UserManager {
                             this.updateUserProfile();
                             resolve();
                         } else {
-                            window.location.href = '../pages/login.html';
+                            window.location.href = 'login.html';
                         }
                     } catch (error) {
-                        logger.error('USER_AUTH_CHECK_ERROR', error);
-                        window.location.href = '../pages/login.html';
+                        console.error('USER_AUTH_CHECK_ERROR', error);
+                        window.location.href = 'login.html';
                     }
                 } else {
-                    window.location.href = '../pages/login.html';
+                    window.location.href = 'login.html';
                 }
             });
         });
@@ -58,10 +61,12 @@ class UserManager {
 
     async loadUserData() {
         try {
+            const db = firebase.firestore();
+            
             // Load user's bookings
             const bookingsSnapshot = await db.collection('bookings')
                 .where('userId', '==', this.currentUser.uid)
-                .orderBy('bookingTime', 'desc')
+                .orderBy('createdAt', 'desc')
                 .limit(10)
                 .get();
             
@@ -75,13 +80,13 @@ class UserManager {
             // Load nearby stations
             await this.loadNearbyStations();
             
-            logger.log('USER_DATA_LOADED', {
+            console.log('USER_DATA_LOADED', {
                 userId: this.currentUser.uid,
                 bookings: this.userBookings.length
             });
             
         } catch (error) {
-            logger.error('USER_DATA_LOAD_ERROR', error);
+            console.error('USER_DATA_LOAD_ERROR', error);
             this.showNotification('Failed to load user data', 'error');
         }
     }
@@ -117,20 +122,34 @@ class UserManager {
     }
 
     setupRealTimeListeners() {
+        const db = firebase.firestore();
+        
         // Listen for station updates
-        db.collection('stations')
+        const stationsListener = db.collection('stations')
             .where('isActive', '==', true)
             .onSnapshot((snapshot) => {
-                this.stations = [];
-                snapshot.forEach(doc => {
-                    this.stations.push({ id: doc.id, ...doc.data() });
+                snapshot.forEach(async (doc) => {
+                    const station = { id: doc.id, ...doc.data() };
+                    // Calculate available slots for each station
+                    station.availableSlots = await this.calculateAvailableSlots(station.id);
+                    
+                    // Update or add station
+                    const index = this.stations.findIndex(s => s.id === station.id);
+                    if (index !== -1) {
+                        this.stations[index] = station;
+                    } else {
+                        this.stations.push(station);
+                    }
                 });
+                
                 this.updateStationsList();
                 this.updateMapMarkers();
             });
 
+        this.realTimeListeners.push(stationsListener);
+
         // Listen for user's booking updates
-        db.collection('bookings')
+        const bookingsListener = db.collection('bookings')
             .where('userId', '==', this.currentUser.uid)
             .onSnapshot((snapshot) => {
                 this.userBookings = [];
@@ -139,6 +158,8 @@ class UserManager {
                 });
                 this.updateBookingsList();
             });
+
+        this.realTimeListeners.push(bookingsListener);
     }
 
     handleNavigation(e) {
@@ -224,6 +245,7 @@ class UserManager {
 
     async loadNearbyStations() {
         try {
+            const db = firebase.firestore();
             const stationsSnapshot = await db.collection('stations')
                 .where('isActive', '==', true)
                 .get();
@@ -233,12 +255,111 @@ class UserManager {
                 this.stations.push({ id: doc.id, ...doc.data() });
             });
             
+            // Calculate available slots for all stations
+            for (let station of this.stations) {
+                station.availableSlots = await this.calculateAvailableSlots(station.id);
+            }
+            
             this.updateStationsList();
             this.updateMapMarkers();
             
         } catch (error) {
-            logger.error('LOAD_STATIONS_ERROR', error);
+            console.error('LOAD_STATIONS_ERROR', error);
             this.showNotification('Failed to load stations', 'error');
+        }
+    }
+
+    async calculateAvailableSlots(stationId) {
+        try {
+            const db = firebase.firestore();
+            
+            // Get station data
+            const stationDoc = await db.collection('stations').doc(stationId).get();
+            if (!stationDoc.exists) return 0;
+            
+            const station = stationDoc.data();
+            const totalSlots = station.totalSlots || 0;
+            
+            // Get current time
+            const now = new Date();
+            
+            // Get all bookings for this station
+            const bookingsSnapshot = await db.collection('bookings')
+                .where('stationId', '==', stationId)
+                .where('status', 'in', ['confirmed', 'active'])
+                .get();
+            
+            // Count active bookings at current time
+            let activeBookingsCount = 0;
+            
+            bookingsSnapshot.forEach(doc => {
+                const booking = doc.data();
+                
+                // Check if booking is active now
+                if (booking.startTime && booking.endTime) {
+                    const startTime = booking.startTime.toDate();
+                    const endTime = booking.endTime.toDate();
+                    
+                    // If current time is within booking timeframe, count it as active
+                    if (now >= startTime && now <= endTime) {
+                        activeBookingsCount++;
+                    }
+                }
+            });
+            
+            // Calculate available slots
+            const availableSlots = Math.max(0, totalSlots - activeBookingsCount);
+            return availableSlots;
+            
+        } catch (error) {
+            console.error('Error calculating available slots:', error);
+            // Return default value if calculation fails
+            return 3; // Default slots for demo
+        }
+    }
+
+    async checkTimeSlotAvailability(stationId, startTime, endTime) {
+        try {
+            const db = firebase.firestore();
+            
+            // Get station data
+            const stationDoc = await db.collection('stations').doc(stationId).get();
+            if (!stationDoc.exists) return false;
+            
+            const station = stationDoc.data();
+            const totalSlots = station.totalSlots || 0;
+            
+            // Get all bookings for this station that overlap with requested time
+            const bookingsSnapshot = await db.collection('bookings')
+                .where('stationId', '==', stationId)
+                .where('status', 'in', ['pending', 'confirmed', 'active'])
+                .get();
+            
+            // Count bookings that overlap with requested time
+            let overlappingBookingsCount = 0;
+            
+            bookingsSnapshot.forEach(doc => {
+                const booking = doc.data();
+                
+                if (booking.startTime && booking.endTime) {
+                    const bookingStart = booking.startTime.toDate();
+                    const bookingEnd = booking.endTime.toDate();
+                    
+                    // Check if time ranges overlap
+                    const timeOverlaps = (startTime < bookingEnd && endTime > bookingStart);
+                    
+                    if (timeOverlaps) {
+                        overlappingBookingsCount++;
+                    }
+                }
+            });
+            
+            // Check if there's at least one slot available
+            return overlappingBookingsCount < totalSlots;
+            
+        } catch (error) {
+            console.error('Error checking time slot availability:', error);
+            return false;
         }
     }
 
@@ -275,37 +396,47 @@ class UserManager {
     }
 
     getMarkerIcon(station) {
-        const baseIcon = {
+        const availableSlots = station.availableSlots || 0;
+        let fillColor = "#e53e3e"; // Red for no slots
+        
+        if (availableSlots > 3) {
+            fillColor = "#00a884"; // Green for many slots
+        } else if (availableSlots > 0) {
+            fillColor = "#d69e2e"; // Yellow for few slots
+        }
+        
+        if (station.chargerType === 'fast') {
+            fillColor = "#3182ce"; // Blue for fast chargers
+        }
+        
+        return {
             path: google.maps.SymbolPath.CIRCLE,
-            fillColor: station.availableSlots > 0 ? "#00a884" : "#e53e3e",
+            fillColor: fillColor,
             fillOpacity: 0.8,
             strokeWeight: 2,
             strokeColor: "#FFFFFF",
             scale: 15
         };
-        
-        if (station.chargerType === 'fast') {
-            baseIcon.fillColor = "#3182ce";
-        }
-        
-        return baseIcon;
     }
 
     getStationInfoWindowContent(station) {
+        const availableSlots = station.availableSlots || 0;
+        const totalSlots = station.totalSlots || 0;
+        
         return `
             <div class="info-window">
                 <h3>${station.name}</h3>
                 <p>${station.address}</p>
                 <p>${station.city}, ${station.state} ${station.zip}</p>
                 <hr>
-                <p><strong>Available Slots:</strong> ${station.availableSlots || 0}/${station.totalSlots || 0}</p>
+                <p><strong>Available Slots:</strong> ${availableSlots}/${totalSlots}</p>
                 <p><strong>Charger Type:</strong> ${station.chargerType}</p>
                 <p><strong>Price:</strong> $${station.pricePerHour || 0}/hour</p>
                 <p><strong>Contact:</strong> ${station.contactNumber || 'N/A'}</p>
                 <button onclick="userManager.bookStation('${station.id}')" 
                         class="book-btn" 
-                        ${station.availableSlots > 0 ? '' : 'disabled'}>
-                    ${station.availableSlots > 0 ? 'Book Now' : 'No Slots Available'}
+                        ${availableSlots > 0 ? '' : 'disabled'}>
+                    ${availableSlots > 0 ? 'Book Now' : 'No Slots Available'}
                 </button>
             </div>
         `;
@@ -317,23 +448,37 @@ class UserManager {
 
         stationsList.innerHTML = '';
         
+        if (this.stations.length === 0) {
+            stationsList.innerHTML = '<p class="no-stations">No stations available.</p>';
+            return;
+        }
+        
         this.stations.forEach(station => {
             const stationCard = document.createElement('div');
             stationCard.className = 'station-card';
             
+            const availableSlots = station.availableSlots || 0;
+            const totalSlots = station.totalSlots || 0;
+            
+            let badgeClass = 'unavailable';
+            let badgeText = 'Full';
+            
+            if (availableSlots > 0) {
+                badgeClass = 'available';
+                badgeText = `${availableSlots} slots available`;
+            }
+            
             stationCard.innerHTML = `
                 <div class="station-header">
                     <h3>${station.name}</h3>
-                    <span class="availability-badge ${station.availableSlots > 0 ? 'available' : 'unavailable'}">
-                        ${station.availableSlots > 0 ? 'Available' : 'Full'}
-                    </span>
+                    <span class="availability-badge ${badgeClass}">${badgeText}</span>
                 </div>
                 
                 <div class="station-info">
                     <p><i class="fas fa-map-marker-alt"></i> ${station.address}, ${station.city}</p>
                     <p><i class="fas fa-phone"></i> ${station.contactNumber || 'N/A'}</p>
                     <p><i class="fas fa-bolt"></i> ${station.chargerType} Charging</p>
-                    <p><i class="fas fa-car"></i> ${station.availableSlots || 0} slots available</p>
+                    <p><i class="fas fa-car"></i> ${availableSlots}/${totalSlots} slots</p>
                     <p><i class="fas fa-money-bill-wave"></i> $${station.pricePerHour || 0}/hour</p>
                 </div>
                 
@@ -342,7 +487,7 @@ class UserManager {
                         <i class="fas fa-info-circle"></i> Details
                     </button>
                     <button class="btn-secondary" onclick="userManager.bookStation('${station.id}')" 
-                            ${station.availableSlots > 0 ? '' : 'disabled'}>
+                            ${availableSlots > 0 ? '' : 'disabled'}>
                         <i class="fas fa-calendar-check"></i> Book Slot
                     </button>
                 </div>
@@ -405,6 +550,7 @@ class UserManager {
 
     async viewStationDetails(stationId) {
         try {
+            const db = firebase.firestore();
             const stationDoc = await db.collection('stations').doc(stationId).get();
             const station = stationDoc.data();
             
@@ -413,12 +559,15 @@ class UserManager {
                 return;
             }
 
+            // Calculate available slots
+            station.availableSlots = await this.calculateAvailableSlots(stationId);
+
             // Show station details in a modal
             const modal = this.createStationModal(station);
             document.body.appendChild(modal);
             
         } catch (error) {
-            logger.error('VIEW_STATION_DETAILS_ERROR', error);
+            console.error('VIEW_STATION_DETAILS_ERROR', error);
             this.showNotification('Failed to load station details', 'error');
         }
     }
@@ -495,10 +644,19 @@ class UserManager {
 
     async bookStation(stationId) {
         try {
+            const db = firebase.firestore();
             const stationDoc = await db.collection('stations').doc(stationId).get();
-            const station = stationDoc.data();
+            let station = stationDoc.data();
             
-            if (!station || station.availableSlots <= 0) {
+            if (!station) {
+                this.showNotification('Station not found', 'error');
+                return;
+            }
+
+            // Calculate current available slots
+            station.availableSlots = await this.calculateAvailableSlots(stationId);
+            
+            if (station.availableSlots <= 0) {
                 this.showNotification('No slots available at this station', 'error');
                 return;
             }
@@ -507,7 +665,7 @@ class UserManager {
             this.showBookingForm(station);
             
         } catch (error) {
-            logger.error('BOOK_STATION_ERROR', error);
+            console.error('BOOK_STATION_ERROR', error);
             this.showNotification('Failed to book station', 'error');
         }
     }
@@ -525,8 +683,8 @@ class UserManager {
                     <div class="booking-summary">
                         <h3>${station.name}</h3>
                         <p>${station.address}, ${station.city}</p>
-                        <p>Price: <strong>$${station.pricePerHour}/hour</strong></p>
-                        <p>Available Slots: ${station.availableSlots}</p>
+                        <p>Available Slots: <strong>${station.availableSlots}</strong></p>
+                        <p>Price: <strong>$${station.pricePerHour || 0}/hour</strong></p>
                     </div>
                     
                     <form id="bookingForm">
@@ -544,7 +702,7 @@ class UserManager {
                             <label for="duration">Duration (hours) *</label>
                             <select id="duration" required>
                                 <option value="1">1 hour</option>
-                                <option value="2">2 hours</option>
+                                <option value="2" selected>2 hours</option>
                                 <option value="3">3 hours</option>
                                 <option value="4">4 hours</option>
                                 <option value="5">5 hours</option>
@@ -564,14 +722,19 @@ class UserManager {
                         
                         <div class="price-summary">
                             <h4>Price Summary</h4>
-                            <p>Duration: <span id="durationDisplay">1</span> hours</p>
-                            <p>Total: $<span id="totalPrice">${station.pricePerHour}</span></p>
+                            <p>Duration: <span id="durationDisplay">2</span> hours</p>
+                            <p>Total: $<span id="totalPrice">${(station.pricePerHour || 0) * 2}</span></p>
+                        </div>
+                        
+                        <div id="slotStatus" class="slot-status" style="display: none;">
+                            <i class="fas fa-spinner fa-spin"></i>
+                            <span>Checking slot availability...</span>
                         </div>
                     </form>
                 </div>
                 <div class="modal-footer">
-                    <button class="btn-primary" onclick="userManager.submitBooking('${station.id}')">
-                        <i class="fas fa-credit-card"></i> Confirm Booking
+                    <button class="btn-primary" id="checkAvailabilityBtn" onclick="userManager.checkBookingAvailability('${station.id}')">
+                        <i class="fas fa-search"></i> Check Availability
                     </button>
                     <button class="btn-secondary close-modal">Cancel</button>
                 </div>
@@ -596,16 +759,103 @@ class UserManager {
             totalPrice.textContent = total.toFixed(2);
         });
         
+        // Set default date to today
+        const today = new Date().toISOString().split('T')[0];
+        modal.querySelector('#bookingDate').value = today;
+        
+        // Set default time to next hour
+        const nextHour = new Date();
+        nextHour.setHours(nextHour.getHours() + 1);
+        nextHour.setMinutes(0, 0, 0);
+        const timeString = nextHour.toTimeString().slice(0, 5);
+        modal.querySelector('#startTime').value = timeString;
+        
         document.body.appendChild(modal);
+    }
+
+    async checkBookingAvailability(stationId) {
+        try {
+            const checkBtn = document.getElementById('checkAvailabilityBtn');
+            const slotStatus = document.getElementById('slotStatus');
+            
+            if (checkBtn) checkBtn.disabled = true;
+            if (slotStatus) {
+                slotStatus.style.display = 'block';
+                slotStatus.className = 'slot-status';
+                slotStatus.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Checking slot availability...';
+            }
+            
+            const date = document.getElementById('bookingDate').value;
+            const startTime = document.getElementById('startTime').value;
+            const duration = parseInt(document.getElementById('duration').value);
+            const vehicleType = document.getElementById('vehicleType').value;
+            
+            if (!date || !startTime || !duration || !vehicleType) {
+                this.showNotification('Please fill all required fields', 'error');
+                if (checkBtn) checkBtn.disabled = false;
+                if (slotStatus) slotStatus.style.display = 'none';
+                return;
+            }
+
+            // Calculate times
+            const startDateTime = new Date(`${date}T${startTime}`);
+            const endDateTime = new Date(startDateTime.getTime() + (duration * 60 * 60 * 1000));
+            
+            // Check if booking is in the future
+            if (startDateTime < new Date()) {
+                this.showNotification('Booking time must be in the future', 'error');
+                if (checkBtn) checkBtn.disabled = false;
+                if (slotStatus) {
+                    slotStatus.className = 'slot-status unavailable';
+                    slotStatus.innerHTML = '<i class="fas fa-times-circle"></i> Booking time must be in the future';
+                }
+                return;
+            }
+
+            // Check time slot availability
+            const isSlotAvailable = await this.checkTimeSlotAvailability(stationId, startDateTime, endDateTime);
+            
+            if (slotStatus) {
+                if (isSlotAvailable) {
+                    slotStatus.className = 'slot-status available';
+                    slotStatus.innerHTML = '<i class="fas fa-check-circle"></i> Slots available! You can proceed with booking.';
+                    
+                    // Replace the check button with confirm booking button
+                    if (checkBtn) {
+                        checkBtn.textContent = 'Confirm Booking';
+                        checkBtn.onclick = () => this.submitBooking(stationId);
+                    }
+                } else {
+                    slotStatus.className = 'slot-status unavailable';
+                    slotStatus.innerHTML = '<i class="fas fa-times-circle"></i> No slots available for the selected time period';
+                    
+                    if (checkBtn) checkBtn.disabled = false;
+                }
+            }
+            
+        } catch (error) {
+            console.error('Error checking booking availability:', error);
+            const slotStatus = document.getElementById('slotStatus');
+            if (slotStatus) {
+                slotStatus.className = 'slot-status unavailable';
+                slotStatus.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Error checking availability';
+            }
+            
+            const checkBtn = document.getElementById('checkAvailabilityBtn');
+            if (checkBtn) checkBtn.disabled = false;
+        }
     }
 
     async submitBooking(stationId) {
         try {
+            const db = firebase.firestore();
+            
+            // Get station data
             const stationDoc = await db.collection('stations').doc(stationId).get();
             const station = stationDoc.data();
             
-            if (!station || station.availableSlots <= 0) {
-                this.showNotification('No slots available', 'error');
+            if (!station) {
+                this.showNotification('Station not found', 'error');
                 return;
             }
 
@@ -630,6 +880,21 @@ class UserManager {
                 return;
             }
 
+            // Check time slot availability one more time
+            const isSlotAvailable = await this.checkTimeSlotAvailability(stationId, startDateTime, endDateTime);
+            if (!isSlotAvailable) {
+                this.showNotification('No slots available at the selected time. Please choose a different time.', 'error');
+                return;
+            }
+
+            const totalAmount = duration * station.pricePerHour;
+            
+            // Check user balance
+            if (this.currentUser.balance < totalAmount) {
+                this.showNotification('Insufficient balance. Please add funds to your wallet.', 'error');
+                return;
+            }
+
             const bookingData = {
                 stationId: stationId,
                 stationName: station.name,
@@ -641,27 +906,38 @@ class UserManager {
                 duration: duration,
                 vehicleType: vehicleType,
                 licensePlate: licensePlate,
-                totalAmount: duration * station.pricePerHour,
-                status: 'pending', // pending -> confirmed -> active -> completed
-                bookingTime: firebase.firestore.FieldValue.serverTimestamp(),
+                totalAmount: totalAmount,
+                status: 'pending',
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                 paymentStatus: 'pending'
             };
 
-            logger.log('CREATE_BOOKING_ATTEMPT', {
+            console.log('CREATE_BOOKING_ATTEMPT', {
                 stationId,
                 userId: this.currentUser.uid,
                 bookingData
             });
 
-            // Create booking
-            const bookingRef = await db.collection('bookings').add(bookingData);
+            // Start a batch write for atomic operations
+            const batch = db.batch();
             
-            // Update station available slots
-            await db.collection('stations').doc(stationId).update({
-                availableSlots: station.availableSlots - 1
-            });
+            // Create booking document
+            const bookingRef = db.collection('bookings').doc();
+            batch.set(bookingRef, bookingData);
+            
+            // Deduct amount from user balance
+            const userRef = db.collection('users').doc(this.currentUser.uid);
+            const newBalance = this.currentUser.balance - totalAmount;
+            batch.update(userRef, { balance: newBalance });
+            
+            // Commit the batch
+            await batch.commit();
+            
+            // Update local user balance
+            this.currentUser.balance = newBalance;
+            this.updateUserProfile();
 
-            logger.log('CREATE_BOOKING_SUCCESS', {
+            console.log('CREATE_BOOKING_SUCCESS', {
                 bookingId: bookingRef.id,
                 stationId
             });
@@ -669,10 +945,14 @@ class UserManager {
             this.showNotification('Booking created successfully! Please confirm payment.', 'success');
             
             // Close modal
-            document.querySelector('.modal').remove();
+            const modal = document.querySelector('.modal');
+            if (modal) modal.remove();
+            
+            // Reload stations to update available slots
+            await this.loadNearbyStations();
             
         } catch (error) {
-            logger.error('CREATE_BOOKING_ERROR', error);
+            console.error('CREATE_BOOKING_ERROR', error);
             this.showNotification('Failed to create booking', 'error');
         }
     }
@@ -683,11 +963,18 @@ class UserManager {
         }
 
         try {
+            const db = firebase.firestore();
             const bookingDoc = await db.collection('bookings').doc(bookingId).get();
             const booking = bookingDoc.data();
             
             if (!booking) {
                 this.showNotification('Booking not found', 'error');
+                return;
+            }
+
+            // Check if booking can be cancelled
+            if (booking.status === 'completed' || booking.status === 'cancelled') {
+                this.showNotification('This booking cannot be cancelled', 'error');
                 return;
             }
 
@@ -697,30 +984,33 @@ class UserManager {
                 cancelledAt: firebase.firestore.FieldValue.serverTimestamp()
             });
 
-            // Return slot to station
-            const stationDoc = await db.collection('stations').doc(booking.stationId).get();
-            const station = stationDoc.data();
+            // Refund to user balance
+            const userRef = db.collection('users').doc(this.currentUser.uid);
+            const userDoc = await userRef.get();
+            const userData = userDoc.data();
+            const newBalance = (userData.balance || 0) + (booking.totalAmount || 0);
             
-            if (station) {
-                await db.collection('stations').doc(booking.stationId).update({
-                    availableSlots: station.availableSlots + 1
-                });
-            }
+            await userRef.update({ balance: newBalance });
+            
+            // Update local user balance
+            this.currentUser.balance = newBalance;
+            this.updateUserProfile();
 
-            logger.log('CANCEL_BOOKING_SUCCESS', { bookingId });
-            this.showNotification('Booking cancelled successfully', 'success');
+            console.log('CANCEL_BOOKING_SUCCESS', { bookingId });
+            this.showNotification('Booking cancelled successfully. Amount refunded to your wallet.', 'success');
+            
+            // Reload stations to update available slots
+            await this.loadNearbyStations();
             
         } catch (error) {
-            logger.error('CANCEL_BOOKING_ERROR', error);
+            console.error('CANCEL_BOOKING_ERROR', error);
             this.showNotification('Failed to cancel booking', 'error');
         }
     }
 
     async confirmBooking(bookingId) {
         try {
-            // In a real application, you would integrate with a payment gateway here
-            // For this example, we'll simulate payment confirmation
-            
+            const db = firebase.firestore();
             const bookingDoc = await db.collection('bookings').doc(bookingId).get();
             const booking = bookingDoc.data();
             
@@ -729,18 +1019,18 @@ class UserManager {
                 return;
             }
 
-            // Update booking status
+            // Update booking status to confirmed
             await db.collection('bookings').doc(bookingId).update({
                 status: 'confirmed',
                 paymentStatus: 'paid',
                 confirmedAt: firebase.firestore.FieldValue.serverTimestamp()
             });
 
-            logger.log('CONFIRM_BOOKING_SUCCESS', { bookingId });
+            console.log('CONFIRM_BOOKING_SUCCESS', { bookingId });
             this.showNotification('Booking confirmed! Your slot is reserved.', 'success');
             
         } catch (error) {
-            logger.error('CONFIRM_BOOKING_ERROR', error);
+            console.error('CONFIRM_BOOKING_ERROR', error);
             this.showNotification('Failed to confirm booking', 'error');
         }
     }
@@ -777,16 +1067,53 @@ class UserManager {
 
     updateFilteredStationsList(filteredStations) {
         const stationsList = document.getElementById('stationsList');
+        if (!stationsList) return;
+        
         stationsList.innerHTML = '';
+        
+        if (filteredStations.length === 0) {
+            stationsList.innerHTML = '<p class="no-stations">No stations match your filter.</p>';
+            return;
+        }
         
         filteredStations.forEach(station => {
             const stationCard = document.createElement('div');
             stationCard.className = 'station-card';
+            
+            const availableSlots = station.availableSlots || 0;
+            let badgeClass = 'unavailable';
+            let badgeText = 'Full';
+            
+            if (availableSlots > 0) {
+                badgeClass = 'available';
+                badgeText = `${availableSlots} slots available`;
+            }
+            
             stationCard.innerHTML = `
-                <h3>${station.name}</h3>
-                <p>${station.address}, ${station.city}</p>
-                <p>Available: ${station.availableSlots} | Type: ${station.chargerType}</p>
+                <div class="station-header">
+                    <h3>${station.name}</h3>
+                    <span class="availability-badge ${badgeClass}">${badgeText}</span>
+                </div>
+                
+                <div class="station-info">
+                    <p><i class="fas fa-map-marker-alt"></i> ${station.address}, ${station.city}</p>
+                    <p><i class="fas fa-phone"></i> ${station.contactNumber || 'N/A'}</p>
+                    <p><i class="fas fa-bolt"></i> ${station.chargerType} Charging</p>
+                    <p><i class="fas fa-car"></i> ${availableSlots} slots available</p>
+                    <p><i class="fas fa-money-bill-wave"></i> $${station.pricePerHour || 0}/hour</p>
+                </div>
+                
+                <div class="station-actions">
+                    <button class="btn-primary" onclick="userManager.viewStationDetails('${station.id}')">
+                        <i class="fas fa-info-circle"></i> Details
+                    </button>
+                    <button class="btn-secondary" onclick="userManager.bookStation('${station.id}')" 
+                            ${availableSlots > 0 ? '' : 'disabled'}>
+                        <i class="fas fa-calendar-check"></i> Book Slot
+                    </button>
+                </div>
             `;
+            
             stationsList.appendChild(stationCard);
         });
     }
@@ -804,7 +1131,7 @@ class UserManager {
             top: 20px;
             right: 20px;
             padding: 1rem 1.5rem;
-            border-radius: var(--radius);
+            border-radius: 8px;
             color: white;
             display: flex;
             justify-content: space-between;
@@ -815,11 +1142,11 @@ class UserManager {
         `;
         
         if (type === 'success') {
-            notification.style.backgroundColor = 'var(--success-color)';
+            notification.style.backgroundColor = '#38a169';
         } else if (type === 'error') {
-            notification.style.backgroundColor = 'var(--danger-color)';
+            notification.style.backgroundColor = '#e53e3e';
         } else {
-            notification.style.backgroundColor = 'var(--accent-color)';
+            notification.style.backgroundColor = '#4299e1';
         }
         
         document.body.appendChild(notification);
@@ -833,11 +1160,15 @@ class UserManager {
 
     async logout() {
         try {
-            await auth.signOut();
-            logger.log('USER_LOGOUT', { userId: this.currentUser?.uid });
-            window.location.href = '../pages/login.html';
+            await firebase.auth().signOut();
+            // Clean up real-time listeners
+            this.realTimeListeners.forEach(unsubscribe => unsubscribe());
+            this.realTimeListeners = [];
+            
+            console.log('USER_LOGOUT', { userId: this.currentUser?.uid });
+            window.location.href = 'login.html';
         } catch (error) {
-            logger.error('LOGOUT_ERROR', error);
+            console.error('LOGOUT_ERROR', error);
             this.showNotification(error.message, 'error');
         }
     }
