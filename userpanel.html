@@ -758,6 +758,11 @@
             color: #742a2a;
         }
 
+        .availability-badge.limited {
+            background-color: #fef3c7;
+            color: #92400e;
+        }
+
         .station-info {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -1771,15 +1776,15 @@
                         <div class="map-legend">
                             <div class="legend-item">
                                 <div class="legend-color available"></div>
-                                <span>Available</span>
+                                <span>Available (2+ slots)</span>
                             </div>
                             <div class="legend-item">
-                                <div class="legend-color fast"></div>
-                                <span>Fast Charging</span>
+                                <div class="legend-color limited"></div>
+                                <span>Limited (1 slot)</span>
                             </div>
                             <div class="legend-item">
                                 <div class="legend-color full"></div>
-                                <span>Full</span>
+                                <span>Full (0 slots)</span>
                             </div>
                             <div class="legend-item">
                                 <div class="legend-color user"></div>
@@ -2171,6 +2176,9 @@
                 this.stations = [];
                 this.bookings = [];
                 this.realTimeListeners = [];
+                this.currentStation = null;
+                this.markers = [];
+                this.userLocationMarker = null;
                 this.init();
             }
 
@@ -2186,7 +2194,6 @@
                 await this.checkAuthState();
                 this.initializeNavigation();
                 this.initializeUserDropdown();
-                this.setupRealTimeListeners();
             }
 
             setupEventListeners() {
@@ -2284,63 +2291,6 @@
                 this.updateCurrentDate();
             }
 
-            setupRealTimeListeners() {
-                // Clean up any existing listeners
-                this.realTimeListeners.forEach(unsubscribe => unsubscribe());
-                this.realTimeListeners = [];
-
-                if (!this.user) return;
-
-                // Listen for station updates
-                const stationsListener = db.collection('stations')
-                    .where('isActive', '==', true)
-                    .onSnapshot((snapshot) => {
-                        this.stations = [];
-                        snapshot.forEach(doc => {
-                            const station = { id: doc.id, ...doc.data() };
-                            
-                            // Calculate available slots
-                            this.calculateAvailableSlots(station.id).then(availableSlots => {
-                                station.availableSlots = availableSlots;
-                                this.stations.push(station);
-                                
-                                // Update UI if we're in stations section
-                                if (this.currentSection === 'stations') {
-                                    this.updateStationsList();
-                                    this.updateMapMarkers();
-                                }
-                            });
-                        });
-                    }, (error) => {
-                        console.error('Stations listener error:', error);
-                    });
-
-                this.realTimeListeners.push(stationsListener);
-
-                // Listen for user's booking updates
-                const bookingsListener = db.collection('bookings')
-                    .where('userId', '==', this.user.uid)
-                    .onSnapshot((snapshot) => {
-                        this.bookings = [];
-                        snapshot.forEach(doc => {
-                            this.bookings.push({ id: doc.id, ...doc.data() });
-                        });
-                        
-                        // Update UI if we're in bookings section
-                        if (this.currentSection === 'bookings') {
-                            this.updateBookingsList();
-                            this.updateBookingStats();
-                        }
-                        
-                        // Update dashboard stats
-                        this.updateDashboardStats();
-                    }, (error) => {
-                        console.error('Bookings listener error:', error);
-                    });
-
-                this.realTimeListeners.push(bookingsListener);
-            }
-
             initializeUserDropdown() {
                 const toggle = document.getElementById('userProfileToggle');
                 const dropdown = document.getElementById('userDropdown');
@@ -2403,7 +2353,6 @@
 
             async checkAuthState() {
                 try {
-                    // Show loading overlay
                     this.showLoading();
                     
                     auth.onAuthStateChanged(async (user) => {
@@ -2417,7 +2366,6 @@
                             this.showNotification(`Welcome back, ${this.userData.name}!`, 'success');
                             this.hideLoading();
                         } else {
-                            // Redirect to login if not authenticated
                             window.location.href = 'login.html';
                         }
                     }, (error) => {
@@ -2436,7 +2384,6 @@
                 try {
                     console.log('Loading user data for UID:', this.user.uid);
                     
-                    // First check if user document exists
                     const userRef = db.collection('users').doc(this.user.uid);
                     const userDoc = await userRef.get();
                     
@@ -2445,7 +2392,6 @@
                         console.log('User data loaded:', this.userData);
                     } else {
                         console.log('User document does not exist, creating new one...');
-                        // Create user document if it doesn't exist
                         this.userData = {
                             name: this.user.displayName || this.user.email.split('@')[0],
                             email: this.user.email,
@@ -2466,15 +2412,8 @@
                     }
                 } catch (error) {
                     console.error('Error loading user data:', error);
+                    this.showError(`Error loading user data: ${error.message}`);
                     
-                    // Show specific error message
-                    if (error.code === 'permission-denied') {
-                        this.showError('Permission denied. Please check Firebase security rules.');
-                    } else {
-                        this.showError(`Error loading user data: ${error.message}`);
-                    }
-                    
-                    // Create basic user data from auth
                     this.userData = {
                         name: this.user.displayName || this.user.email.split('@')[0],
                         email: this.user.email,
@@ -2492,25 +2431,181 @@
                 }
             }
 
+            setupRealTimeListeners() {
+                // Clean up existing listeners
+                this.realTimeListeners.forEach(unsubscribe => unsubscribe());
+                this.realTimeListeners = [];
+
+                if (!this.user) return;
+
+                // Listen for user data updates
+                const userListener = db.collection('users').doc(this.user.uid)
+                    .onSnapshot((doc) => {
+                        if (doc.exists) {
+                            this.userData = doc.data();
+                            this.updateUserInfo();
+                            this.updateNavbarUserInfo();
+                            this.updateDashboardStats();
+                        }
+                    }, (error) => {
+                        console.error('User listener error:', error);
+                    });
+
+                this.realTimeListeners.push(userListener);
+
+                // FIXED: Listen for ALL stations without filtering by isActive
+                // This will fetch all stations from the database
+                const stationsListener = db.collection('stations')
+                    .onSnapshot(async (snapshot) => {
+                        console.log('Stations updated in real-time. Total stations:', snapshot.size);
+                        this.stations = [];
+                        const stationsPromises = [];
+                        
+                        snapshot.forEach(doc => {
+                            const station = { id: doc.id, ...doc.data() };
+                            console.log('Station loaded:', station.name, 'Status:', station.isActive);
+                            
+                            // Calculate available slots for each station
+                            const promise = this.calculateAvailableSlots(station.id).then(availableSlots => {
+                                station.availableSlots = availableSlots;
+                                this.stations.push(station);
+                            });
+                            stationsPromises.push(promise);
+                        });
+                        
+                        await Promise.all(stationsPromises);
+                        
+                        console.log('Total stations loaded:', this.stations.length);
+                        
+                        // Update UI if we're in stations section
+                        if (this.currentSection === 'stations') {
+                            this.updateStationsList();
+                            this.updateMapMarkers();
+                        }
+                    }, (error) => {
+                        console.error('Stations listener error:', error);
+                        this.showNotification('Error loading stations: ' + error.message, 'error');
+                    });
+
+                this.realTimeListeners.push(stationsListener);
+
+                // Listen for bookings updates
+                const bookingsListener = db.collection('bookings')
+                    .where('userId', '==', this.user.uid)
+                    .onSnapshot((snapshot) => {
+                        console.log('Bookings updated in real-time');
+                        this.bookings = [];
+                        snapshot.forEach(doc => {
+                            this.bookings.push({ id: doc.id, ...doc.data() });
+                        });
+                        
+                        if (this.currentSection === 'bookings') {
+                            this.updateBookingsList();
+                            this.updateBookingStats();
+                        }
+                        
+                        if (this.currentSection === 'history') {
+                            this.loadHistory();
+                        }
+                        
+                        this.updateDashboardStats();
+                    }, (error) => {
+                        console.error('Bookings listener error:', error);
+                        this.showNotification('Error loading bookings: ' + error.message, 'error');
+                    });
+
+                this.realTimeListeners.push(bookingsListener);
+            }
+
+            async calculateAvailableSlots(stationId) {
+                try {
+                    const stationDoc = await db.collection('stations').doc(stationId).get();
+                    if (!stationDoc.exists) return 0;
+                    
+                    const station = stationDoc.data();
+                    const totalSlots = station.totalSlots || 0;
+                    
+                    const now = firebase.firestore.Timestamp.now();
+                    
+                    // Get active bookings for this station
+                    const bookingsQuery = db.collection('bookings')
+                        .where('stationId', '==', stationId)
+                        .where('status', 'in', ['pending', 'confirmed', 'active']);
+                    
+                    const bookingsSnapshot = await bookingsQuery.get();
+                    
+                    let activeBookingsCount = 0;
+                    bookingsSnapshot.forEach(doc => {
+                        const booking = doc.data();
+                        if (booking.endTime && booking.endTime > now) {
+                            activeBookingsCount++;
+                        }
+                    });
+                    
+                    return Math.max(0, totalSlots - activeBookingsCount);
+                    
+                } catch (error) {
+                    console.error('Error calculating available slots:', error);
+                    return 0;
+                }
+            }
+
+            async checkTimeSlotAvailability(stationId, startTime, endTime) {
+                try {
+                    const stationDoc = await db.collection('stations').doc(stationId).get();
+                    if (!stationDoc.exists) return false;
+                    
+                    const station = stationDoc.data();
+                    const totalSlots = station.totalSlots || 0;
+                    
+                    // Get bookings for this station that might overlap
+                    const bookingsQuery = db.collection('bookings')
+                        .where('stationId', '==', stationId)
+                        .where('status', 'in', ['pending', 'confirmed', 'active']);
+                    
+                    const bookingsSnapshot = await bookingsQuery.get();
+                    
+                    let overlappingBookingsCount = 0;
+                    
+                    bookingsSnapshot.forEach(doc => {
+                        const booking = doc.data();
+                        
+                        if (booking.startTime && booking.endTime) {
+                            const bookingStart = booking.startTime.toDate();
+                            const bookingEnd = booking.endTime.toDate();
+                            
+                            // Check for overlap
+                            const timeOverlaps = (startTime < bookingEnd && endTime > bookingStart);
+                            
+                            if (timeOverlaps) {
+                                overlappingBookingsCount++;
+                            }
+                        }
+                    });
+                    
+                    return overlappingBookingsCount < totalSlots;
+                    
+                } catch (error) {
+                    console.error('Error checking time slot availability:', error);
+                    return false;
+                }
+            }
+
             updateUserInfo() {
                 try {
-                    // Get first letter of user's name for avatar
                     const userName = this.userData?.name || 'User';
                     const firstLetter = userName.charAt(0).toUpperCase();
                     
-                    // Update user avatar
                     const userAvatar = document.getElementById('userAvatar');
                     if (firstLetter && userAvatar) {
                         userAvatar.innerHTML = firstLetter;
                     }
                     
-                    // Update welcome banner
                     const welcomeName = document.getElementById('welcomeName');
                     if (welcomeName) {
                         welcomeName.textContent = userName;
                     }
                     
-                    // Update profile section
                     const profileName = document.getElementById('profileName');
                     const profileEmail = document.getElementById('profileEmail');
                     const memberSince = document.getElementById('memberSince');
@@ -2532,7 +2627,6 @@
                         memberSince.textContent = new Date().getFullYear();
                     }
                     
-                    // Update profile form
                     const fullName = document.getElementById('fullName');
                     const phoneNumber = document.getElementById('phoneNumber');
                     const email = document.getElementById('email');
@@ -2549,7 +2643,6 @@
                     if (address) address.value = this.userData?.address || '';
                     if (preferredCharger) preferredCharger.value = this.userData?.preferredCharger || 'any';
                     
-                    // Update wallet balance
                     const walletBalance = document.getElementById('walletBalance');
                     const userBalance = document.getElementById('userBalance');
                     
@@ -2561,31 +2654,26 @@
                     }
                 } catch (error) {
                     console.error('Error updating user info:', error);
-                    this.showError('Failed to update user information.');
                 }
             }
 
             updateNavbarUserInfo() {
                 try {
-                    // Update navbar user info
                     const userName = this.userData?.name || 'User';
                     const userEmail = this.user.email || 'No email';
                     
-                    // Update main display
                     const userNameDisplay = document.getElementById('userNameDisplay');
                     const userEmailDisplay = document.getElementById('userEmailDisplay');
                     
                     if (userNameDisplay) userNameDisplay.textContent = userName;
                     if (userEmailDisplay) userEmailDisplay.textContent = userEmail;
                     
-                    // Update dropdown display
                     const dropdownUserName = document.getElementById('dropdownUserName');
                     const dropdownUserEmail = document.getElementById('dropdownUserEmail');
                     
                     if (dropdownUserName) dropdownUserName.textContent = userName;
                     if (dropdownUserEmail) dropdownUserEmail.textContent = userEmail;
                     
-                    // Update avatar with first letter
                     const userAvatar = document.getElementById('userAvatar');
                     const firstLetter = userName.charAt(0).toUpperCase();
                     if (firstLetter && userAvatar) {
@@ -2598,18 +2686,15 @@
 
             showSection(sectionId) {
                 try {
-                    // Hide all sections
                     document.querySelectorAll('.dashboard-section, .stations-section, .bookings-section, .profile-section, .history-section').forEach(section => {
                         section.classList.add('hidden');
                     });
 
-                    // Show selected section
                     const section = document.getElementById(sectionId);
                     if (section) {
                         section.classList.remove('hidden');
                         this.currentSection = sectionId;
 
-                        // Load section-specific data
                         switch(sectionId) {
                             case 'stations':
                                 this.loadStations();
@@ -2618,7 +2703,6 @@
                                 this.loadBookings();
                                 break;
                             case 'profile':
-                                // Data already loaded in updateUserInfo
                                 break;
                             case 'history':
                                 this.loadHistory();
@@ -2632,12 +2716,10 @@
             }
 
             updateActiveNav(activeLink) {
-                // Update desktop nav
                 document.querySelectorAll('.nav-links a').forEach(link => {
                     link.classList.remove('active');
                 });
                 
-                // Update mobile nav
                 document.querySelectorAll('.mobile-nav-links a').forEach(link => {
                     link.classList.remove('active');
                 });
@@ -2668,10 +2750,8 @@
 
                     await db.collection('users').doc(this.user.uid).update(updatedData);
                     
-                    // Update local data
                     Object.assign(this.userData, updatedData);
                     
-                    // Update displayed info
                     this.updateUserInfo();
                     this.updateNavbarUserInfo();
                     
@@ -2686,21 +2766,15 @@
 
             async loadDashboardData() {
                 try {
-                    // Update dashboard stats
                     await this.updateDashboardStats();
-
-                    // Load recent activity
                     await this.loadRecentActivity();
-
                 } catch (error) {
                     console.error('Error loading dashboard data:', error);
-                    this.showError('Failed to load dashboard data.');
                 }
             }
 
             async updateDashboardStats() {
                 try {
-                    // Load bookings count
                     const bookingsSnapshot = await db.collection('bookings')
                         .where('userId', '==', this.user.uid)
                         .get();
@@ -2728,7 +2802,6 @@
                     
                     if (!activityList) return;
                     
-                    // Try to get recent activities from Firestore
                     try {
                         const activitiesSnapshot = await db.collection('activities')
                             .where('userId', '==', this.user.uid)
@@ -2737,7 +2810,6 @@
                             .get();
 
                         if (activitiesSnapshot.empty) {
-                            // Show sample activities if none exist
                             activityList.innerHTML = `
                                 <div class="activity-item">
                                     <i class="fas fa-user-check"></i>
@@ -2762,8 +2834,6 @@
                             });
                         }
                     } catch (error) {
-                        // If permission denied, show sample activities
-                        console.log('Activities permission denied, showing sample data');
                         activityList.innerHTML = `
                             <div class="activity-item">
                                 <i class="fas fa-user-check"></i>
@@ -2789,6 +2859,7 @@
                 }
             }
 
+            // FIXED: Load ALL stations without filtering
             async loadStations() {
                 try {
                     const stationsList = document.getElementById('stationsList');
@@ -2801,80 +2872,58 @@
                         </div>
                     `;
 
-                    // Load stations from Firestore with error handling
                     try {
-                        const stationsSnapshot = await db.collection('stations')
-                            .where('isActive', '==', true)
-                            .get();
+                        // FIXED: Remove the isActive filter to get ALL stations
+                        const stationsSnapshot = await db.collection('stations').get();
+
+                        console.log('Total stations in database:', stationsSnapshot.size);
 
                         if (stationsSnapshot.empty) {
-                            // Show sample stations if none exist
-                            this.stations = [
-                                {
-                                    id: '1',
-                                    name: 'Downtown Charging Hub',
-                                    address: '123 Main St, New York, NY 10001',
-                                    city: 'New York',
-                                    state: 'NY',
-                                    zip: '10001',
-                                    availableSlots: 4,
-                                    totalSlots: 8,
-                                    chargerType: 'fast',
-                                    pricePerHour: 12.99,
-                                    status: 'active',
-                                    isActive: true,
-                                    coordinates: { latitude: 40.7128, longitude: -74.0060 }
-                                },
-                                {
-                                    id: '2',
-                                    name: 'Green Energy Station',
-                                    address: '456 Park Ave, New York, NY 10022',
-                                    city: 'New York',
-                                    state: 'NY',
-                                    zip: '10022',
-                                    availableSlots: 2,
-                                    totalSlots: 6,
-                                    chargerType: 'normal',
-                                    pricePerHour: 9.99,
-                                    status: 'active',
-                                    isActive: true,
-                                    coordinates: { latitude: 40.7589, longitude: -73.9851 }
-                                }
-                            ];
-                        } else {
-                            this.stations = [];
-                            for (const doc of stationsSnapshot.docs) {
-                                const station = { id: doc.id, ...doc.data() };
-                                // Calculate available slots
-                                station.availableSlots = await this.calculateAvailableSlots(station.id);
-                                this.stations.push(station);
-                            }
+                            stationsList.innerHTML = `
+                                <div class="empty-state">
+                                    <i class="fas fa-charging-station"></i>
+                                    <h3>No Stations Available</h3>
+                                    <p>No charging stations found in database</p>
+                                    <button class="btn-primary" onclick="UserManager.getInstance().loadStations()">
+                                        <i class="fas fa-sync"></i> Try Again
+                                    </button>
+                                </div>
+                            `;
+                            return;
                         }
 
+                        this.stations = [];
+                        console.log('Processing stations...');
+                        
+                        for (const doc of stationsSnapshot.docs) {
+                            const station = { id: doc.id, ...doc.data() };
+                            console.log('Processing station:', station.name, 'Active:', station.isActive);
+                            
+                            // Calculate available slots
+                            station.availableSlots = await this.calculateAvailableSlots(station.id);
+                            this.stations.push(station);
+                        }
+
+                        console.log('Total stations loaded:', this.stations.length);
                         this.updateStationsList();
 
-                        // Initialize map if in stations section
                         if (this.currentSection === 'stations') {
                             this.initializeMap();
                         }
 
                     } catch (error) {
                         console.error('Error loading stations from Firestore:', error);
-                        // Show sample stations on error
-                        this.stations = [
-                            {
-                                id: '1',
-                                name: 'Downtown Charging Hub',
-                                address: '123 Main St',
-                                availableSlots: 4,
-                                totalSlots: 8,
-                                chargerType: 'fast',
-                                pricePerHour: 12.99,
-                                status: 'available'
-                            }
-                        ];
-                        this.updateStationsList();
-                        this.showNotification('Using demo station data', 'info');
+                        stationsList.innerHTML = `
+                            <div class="empty-state">
+                                <i class="fas fa-exclamation-triangle"></i>
+                                <h3>Error Loading Stations</h3>
+                                <p>Failed to load stations from database. Please try again later.</p>
+                                <p>Error: ${error.message}</p>
+                                <button class="btn-primary" onclick="UserManager.getInstance().loadStations()">
+                                    <i class="fas fa-sync"></i> Try Again
+                                </button>
+                            `;
+                        this.showNotification('Error loading stations: ' + error.message, 'error');
                     }
 
                 } catch (error) {
@@ -2882,39 +2931,15 @@
                     const stationsList = document.getElementById('stationsList');
                     if (stationsList) {
                         stationsList.innerHTML = `
-                            <div class="loading-stations">
+                            <div class="empty-state">
                                 <i class="fas fa-exclamation-triangle"></i>
-                                <p>Error loading stations. Please try again.</p>
-                            </div>
-                        `;
+                                <h3>Error Loading Stations</h3>
+                                <p>Error: ${error.message}</p>
+                                <button class="btn-primary" onclick="UserManager.getInstance().loadStations()">
+                                    <i class="fas fa-sync"></i> Try Again
+                                </button>
+                            `;
                     }
-                }
-            }
-
-            async calculateAvailableSlots(stationId) {
-                try {
-                    // Get station document
-                    const stationDoc = await db.collection('stations').doc(stationId).get();
-                    if (!stationDoc.exists) return 0;
-                    
-                    const station = stationDoc.data();
-                    const totalSlots = station.totalSlots || 0;
-                    
-                    // Get active bookings for this station
-                    const now = new Date();
-                    const bookingsSnapshot = await db.collection('bookings')
-                        .where('stationId', '==', stationId)
-                        .where('status', 'in', ['pending', 'confirmed', 'active'])
-                        .where('endTime', '>', now)
-                        .get();
-                    
-                    const activeBookings = bookingsSnapshot.size;
-                    const availableSlots = Math.max(0, totalSlots - activeBookings);
-                    
-                    return availableSlots;
-                } catch (error) {
-                    console.error('Error calculating available slots:', error);
-                    return 0;
                 }
             }
 
@@ -2926,8 +2951,11 @@
                     stationsList.innerHTML = `
                         <div class="empty-state">
                             <i class="fas fa-charging-station"></i>
-                            <h3>No Stations Available</h3>
-                            <p>No charging stations found in your area</p>
+                            <h3>No Stations Found</h3>
+                            <p>No charging stations available in the system</p>
+                            <button class="btn-primary" onclick="UserManager.getInstance().loadStations()">
+                                <i class="fas fa-sync"></i> Refresh
+                            </button>
                         </div>
                     `;
                     return;
@@ -2938,6 +2966,9 @@
                     const stationCard = this.createStationCard(station);
                     stationsList.appendChild(stationCard);
                 });
+                
+                // Show station count
+                console.log('Displaying', this.stations.length, 'stations');
             }
 
             createStationCard(station) {
@@ -2946,21 +2977,38 @@
                 
                 const availableSlots = station.availableSlots || 0;
                 const totalSlots = station.totalSlots || 0;
-                const isAvailable = availableSlots > 0;
-                const badgeClass = isAvailable ? 'available' : 'unavailable';
-                const badgeText = isAvailable ? `${availableSlots} Available` : 'Full';
+                
+                let badgeClass = 'unavailable';
+                let badgeText = 'Full';
+                
+                if (availableSlots > 0) {
+                    if (availableSlots === 1) {
+                        badgeClass = 'limited';
+                        badgeText = '1 slot left';
+                    } else {
+                        badgeClass = 'available';
+                        badgeText = `${availableSlots} slots available`;
+                    }
+                }
+                
+                const isAvailable = availableSlots > 0 && station.isActive !== false;
                 
                 card.innerHTML = `
                     <div class="station-header">
                         <h3>${station.name}</h3>
                         <span class="availability-badge ${badgeClass}">${badgeText}</span>
+                        ${station.isActive === false ? '<span style="background-color: #718096; color: white; padding: 2px 8px; border-radius: 4px; font-size: 12px;">Inactive</span>' : ''}
                     </div>
                     <div class="station-info">
                         <p><i class="fas fa-map-marker-alt"></i> ${station.address || 'N/A'}</p>
-                        <p><i class="fas fa-phone"></i> ${station.contactNumber || 'N/A'}</p>
+                        ${station.city ? `<p><i class="fas fa-city"></i> ${station.city}</p>` : ''}
+                        ${station.state ? `<p><i class="fas fa-flag"></i> ${station.state}</p>` : ''}
+                        ${station.contactNumber ? `<p><i class="fas fa-phone"></i> ${station.contactNumber}</p>` : ''}
                         <p><i class="fas fa-bolt"></i> ${station.chargerType === 'fast' ? 'Fast Charging' : 'Normal Charging'}</p>
                         <p><i class="fas fa-car"></i> ${availableSlots}/${totalSlots} slots</p>
-                        <p><i class="fas fa-dollar-sign"></i> $${station.pricePerHour || '0.00'}/hour</p>
+                        <p><i class="fas fa-dollar-sign"></i> $${(station.pricePerHour || 0).toFixed(2)}/hour</p>
+                        ${station.operatingHours ? `<p><i class="fas fa-clock"></i> ${station.operatingHours}</p>` : ''}
+                        ${station.amenities ? `<p><i class="fas fa-star"></i> ${station.amenities}</p>` : ''}
                     </div>
                     <div class="station-actions">
                         <button class="btn-primary" onclick="UserManager.getInstance().bookStation('${station.id}')" ${!isAvailable ? 'disabled' : ''}>
@@ -2978,26 +3026,43 @@
             updateMapMarkers() {
                 if (!this.map || !this.stations.length) return;
                 
-                // Clear existing markers
                 if (this.markers) {
                     this.markers.forEach(marker => marker.setMap(null));
                 }
                 this.markers = [];
                 
-                // Add new markers
                 this.stations.forEach(station => {
                     if (station.coordinates) {
+                        const availableSlots = station.availableSlots || 0;
+                        
+                        let fillColor;
+                        if (station.isActive === false) {
+                            fillColor = "#718096"; // Gray for inactive
+                        } else if (availableSlots === 0) {
+                            fillColor = "#e53e3e"; // Red for full
+                        } else if (availableSlots === 1) {
+                            fillColor = "#d69e2e"; // Orange for limited
+                        } else {
+                            fillColor = station.chargerType === 'fast' ? "#3182ce" : "#00a884";
+                        }
+                        
                         const marker = new google.maps.Marker({
                             position: {
                                 lat: station.coordinates.latitude,
                                 lng: station.coordinates.longitude
                             },
                             map: this.map,
-                            title: station.name,
-                            icon: this.getMarkerIcon(station)
+                            title: station.name + (station.isActive === false ? ' (Inactive)' : ''),
+                            icon: {
+                                path: google.maps.SymbolPath.CIRCLE,
+                                fillColor: fillColor,
+                                fillOpacity: 0.8,
+                                strokeWeight: 2,
+                                strokeColor: "#FFFFFF",
+                                scale: 10
+                            }
                         });
                         
-                        // Add info window
                         const infoWindow = new google.maps.InfoWindow({
                             content: this.getStationInfoWindowContent(station)
                         });
@@ -3011,41 +3076,26 @@
                 });
             }
 
-            getMarkerIcon(station) {
-                const availableSlots = station.availableSlots || 0;
-                let fillColor = availableSlots > 0 ? "#00a884" : "#e53e3e";
-                
-                if (station.chargerType === 'fast') {
-                    fillColor = availableSlots > 0 ? "#3182ce" : "#c53030";
-                }
-                
-                return {
-                    path: google.maps.SymbolPath.CIRCLE,
-                    fillColor: fillColor,
-                    fillOpacity: 0.8,
-                    strokeWeight: 2,
-                    strokeColor: "#FFFFFF",
-                    scale: 10
-                };
-            }
-
             getStationInfoWindowContent(station) {
                 const availableSlots = station.availableSlots || 0;
-                const isAvailable = availableSlots > 0;
+                const totalSlots = station.totalSlots || 0;
+                const isAvailable = availableSlots > 0 && station.isActive !== false;
                 
                 return `
-                    <div style="padding: 10px; min-width: 200px;">
-                        <h3 style="margin: 0 0 10px 0; color: #2d3748;">${station.name}</h3>
+                    <div style="padding: 10px; min-width: 250px;">
+                        <h3 style="margin: 0 0 10px 0; color: #2d3748;">${station.name}${station.isActive === false ? ' (Inactive)' : ''}</h3>
                         <p style="margin: 0 0 5px 0; color: #4a5568;">${station.address || ''}</p>
                         <p style="margin: 0 0 5px 0; color: #4a5568;">${station.city || ''}, ${station.state || ''} ${station.zip || ''}</p>
                         <hr style="margin: 10px 0;">
-                        <p style="margin: 0 0 5px 0;"><strong>Available Slots:</strong> ${availableSlots}/${station.totalSlots || 0}</p>
-                        <p style="margin: 0 0 5px 0;"><strong>Charger Type:</strong> ${station.chargerType}</p>
-                        <p style="margin: 0 0 10px 0;"><strong>Price:</strong> $${station.pricePerHour || 0}/hour</p>
+                        <p style="margin: 0 0 5px 0;"><strong>Status:</strong> ${station.isActive === false ? 'Inactive' : 'Active'}</p>
+                        <p style="margin: 0 0 5px 0;"><strong>Available Slots:</strong> ${availableSlots}/${totalSlots}</p>
+                        <p style="margin: 0 0 5px 0;"><strong>Charger Type:</strong> ${station.chargerType || 'Normal'}</p>
+                        <p style="margin: 0 0 5px 0;"><strong>Price:</strong> $${(station.pricePerHour || 0).toFixed(2)}/hour</p>
+                        ${station.operatingHours ? `<p style="margin: 0 0 5px 0;"><strong>Hours:</strong> ${station.operatingHours}</p>` : ''}
                         <button onclick="UserManager.getInstance().bookStation('${station.id}')" 
-                                style="padding: 8px 16px; background-color: ${isAvailable ? '#00a884' : '#718096'}; color: white; border: none; border-radius: 4px; cursor: ${isAvailable ? 'pointer' : 'not-allowed'}; width: 100%;"
+                                style="padding: 8px 16px; background-color: ${isAvailable ? '#00a884' : '#718096'}; color: white; border: none; border-radius: 4px; cursor: ${isAvailable ? 'pointer' : 'not-allowed'}; width: 100%; margin-top: 10px;"
                                 ${!isAvailable ? 'disabled' : ''}>
-                            ${isAvailable ? 'Book Now' : 'No Slots Available'}
+                            ${isAvailable ? 'Book Now' : station.isActive === false ? 'Station Inactive' : 'No Slots Available'}
                         </button>
                     </div>
                 `;
@@ -3053,7 +3103,6 @@
 
             initializeMap() {
                 try {
-                    // Default center
                     const defaultCenter = { lat: 40.7128, lng: -74.0060 };
                     
                     this.map = new google.maps.Map(document.getElementById('map'), {
@@ -3068,7 +3117,6 @@
                         ]
                     });
 
-                    // Update markers
                     this.updateMapMarkers();
 
                 } catch (error) {
@@ -3086,13 +3134,15 @@
                                 lng: position.coords.longitude
                             };
                             
-                            // Center map on user location if map exists
                             if (this.map) {
                                 this.map.setCenter(userLocation);
                                 this.map.setZoom(14);
                                 
-                                // Add user marker
-                                new google.maps.Marker({
+                                if (this.userLocationMarker) {
+                                    this.userLocationMarker.setMap(null);
+                                }
+                                
+                                this.userLocationMarker = new google.maps.Marker({
                                     position: userLocation,
                                     map: this.map,
                                     icon: {
@@ -3129,7 +3179,6 @@
                             
                             this.showNotification(errorMessage, 'warning');
                             
-                            // Center map on default location
                             if (this.map) {
                                 this.map.setCenter({ lat: 40.7128, lng: -74.0060 });
                                 this.map.setZoom(12);
@@ -3150,7 +3199,8 @@
                 const filteredStations = this.stations.filter(station => 
                     station.name.toLowerCase().includes(query.toLowerCase()) ||
                     station.address.toLowerCase().includes(query.toLowerCase()) ||
-                    (station.city && station.city.toLowerCase().includes(query.toLowerCase()))
+                    (station.city && station.city.toLowerCase().includes(query.toLowerCase())) ||
+                    (station.state && station.state.toLowerCase().includes(query.toLowerCase()))
                 );
                 
                 const stationsList = document.getElementById('stationsList');
@@ -3180,13 +3230,22 @@
                 
                 switch(filterType) {
                     case 'available':
-                        filteredStations = filteredStations.filter(station => station.availableSlots > 0);
+                        filteredStations = filteredStations.filter(station => 
+                            station.availableSlots > 0 && station.isActive !== false
+                        );
                         break;
                     case 'fast':
-                        filteredStations = filteredStations.filter(station => station.chargerType === 'fast');
+                        filteredStations = filteredStations.filter(station => 
+                            station.chargerType === 'fast' && station.isActive !== false
+                        );
                         break;
                     case 'cheap':
+                        filteredStations = filteredStations.filter(station => station.isActive !== false);
                         filteredStations.sort((a, b) => (a.pricePerHour || 0) - (b.pricePerHour || 0));
+                        break;
+                    case 'all':
+                    default:
+                        // Show all stations including inactive ones
                         break;
                 }
                 
@@ -3230,8 +3289,8 @@
 
             async loadBookings() {
                 try {
-                    await this.updateBookingsList();
-                    await this.updateBookingStats();
+                    this.updateBookingsList();
+                    this.updateBookingStats();
                 } catch (error) {
                     console.error('Error loading bookings:', error);
                     const bookingsList = document.getElementById('bookingsList');
@@ -3247,12 +3306,11 @@
                 }
             }
 
-            async updateBookingsList() {
+            updateBookingsList() {
                 try {
                     const bookingsList = document.getElementById('bookingsList');
                     if (!bookingsList) return;
                     
-                    // Filter upcoming bookings (pending, confirmed, active)
                     const upcomingBookings = this.bookings.filter(booking => 
                         ['pending', 'confirmed', 'active'].includes(booking.status)
                     );
@@ -3286,7 +3344,6 @@
                     const pendingBookings = this.bookings.filter(b => b.status === 'pending').length;
                     const cancelledCount = this.bookings.filter(b => b.status === 'cancelled').length;
                     
-                    // Calculate total spent from completed bookings
                     const totalSpent = this.bookings
                         .filter(b => b.status === 'completed')
                         .reduce((sum, booking) => sum + (booking.totalPrice || 0), 0);
@@ -3313,7 +3370,6 @@
                 const statusClass = booking.status || 'pending';
                 const statusText = (booking.status || 'pending').charAt(0).toUpperCase() + (booking.status || 'pending').slice(1);
                 
-                // Format date
                 let date = 'N/A';
                 let time = 'N/A';
                 
@@ -3355,12 +3411,10 @@
             }
 
             switchBookingTab(tab) {
-                // Hide all tabs
                 document.querySelectorAll('.bookings-tab').forEach(tabElement => {
                     tabElement.classList.add('hidden');
                 });
 
-                // Show selected tab
                 const selectedTab = document.getElementById(`${tab}Bookings`);
                 if (selectedTab) {
                     selectedTab.classList.remove('hidden');
@@ -3368,7 +3422,6 @@
                     document.getElementById('activeBookingsTab').classList.remove('hidden');
                 }
 
-                // Load data for the selected tab
                 this.loadTabBookings(tab);
             }
 
@@ -3432,7 +3485,6 @@
                     const historyList = document.getElementById('historyList');
                     if (!historyList) return;
                     
-                    // Filter completed bookings
                     const completedBookings = this.bookings.filter(b => b.status === 'completed');
                     
                     if (completedBookings.length === 0) {
@@ -3478,7 +3530,6 @@
                             historyList.appendChild(historyItem);
                         });
 
-                        // Update history stats
                         const totalSessions = document.getElementById('totalSessions');
                         const totalHoursElement = document.getElementById('totalHours');
                         const historySpent = document.getElementById('historySpent');
@@ -3505,7 +3556,6 @@
                 }
             }
 
-            // Quick Actions Methods
             viewUpcomingBookings() {
                 this.showSection('bookings');
             }
@@ -3546,10 +3596,9 @@
                 this.showSection('stations');
             }
 
-            // Booking Methods
+            // IMPROVED BOOKING FUNCTIONALITY - Fixed price calculations
             async bookStation(stationId) {
                 try {
-                    // Get station details
                     const stationDoc = await db.collection('stations').doc(stationId).get();
                     if (!stationDoc.exists) {
                         this.showNotification('Station not found', 'error');
@@ -3559,36 +3608,48 @@
                     const station = stationDoc.data();
                     
                     // Check if station is active
-                    if (!station.isActive) {
+                    if (station.isActive === false) {
                         this.showNotification('This station is currently unavailable', 'error');
                         return;
                     }
                     
-                    // Check available slots
                     const availableSlots = await this.calculateAvailableSlots(stationId);
                     if (availableSlots <= 0) {
                         this.showNotification('No slots available at this station', 'error');
                         return;
                     }
                     
-                    // Show booking form
+                    this.currentStation = { id: stationId, ...station };
+                    
                     this.showBookingForm(station);
                     
                 } catch (error) {
                     console.error('Error booking station:', error);
-                    this.showNotification('Error loading station details', 'error');
+                    this.showNotification('Error loading station details: ' + error.message, 'error');
                 }
             }
 
             showBookingForm(station) {
+                const today = new Date();
+                const todayStr = today.toISOString().split('T')[0];
+                
+                const nextHour = new Date(today.getTime() + 60 * 60 * 1000);
+                nextHour.setMinutes(0, 0, 0);
+                const timeStr = nextHour.toTimeString().slice(0, 5);
+                
+                // FIXED: Proper price calculation
+                const pricePerHour = parseFloat(station.pricePerHour) || 0;
+                const defaultDuration = 2;
+                const defaultTotal = (pricePerHour * defaultDuration).toFixed(2);
+                
                 this.showModal('Book Station', `
                     <div class="form-group">
                         <label for="bookingDate">Date *</label>
-                        <input type="date" id="bookingDate" min="${new Date().toISOString().split('T')[0]}" required>
+                        <input type="date" id="bookingDate" min="${todayStr}" required value="${todayStr}">
                     </div>
                     <div class="form-group">
                         <label for="startTime">Start Time *</label>
-                        <input type="time" id="startTime" required>
+                        <input type="time" id="startTime" required value="${timeStr}">
                     </div>
                     <div class="form-group">
                         <label for="duration">Duration (hours) *</label>
@@ -3597,32 +3658,43 @@
                             <option value="2" selected>2 hours</option>
                             <option value="3">3 hours</option>
                             <option value="4">4 hours</option>
+                            <option value="5">5 hours</option>
+                            <option value="6">6 hours</option>
                         </select>
                     </div>
                     <div class="form-group">
                         <label for="vehicleType">Vehicle Type *</label>
-                        <input type="text" id="vehicleType" required placeholder="e.g., Tesla Model 3">
+                        <input type="text" id="vehicleType" required placeholder="e.g., Tesla Model 3" value="${this.userData?.vehicleModel || ''}">
                     </div>
                     <div class="form-group">
                         <label for="licensePlate">License Plate (Optional)</label>
-                        <input type="text" id="licensePlate" placeholder="e.g., ABC-123">
+                        <input type="text" id="licensePlate" placeholder="e.g., ABC-123" value="${this.userData?.licensePlate || ''}">
                     </div>
-                    <div class="price-summary">
-                        <h4>Price Summary</h4>
-                        <p>Duration: <span id="durationDisplay">2</span> hours</p>
-                        <p>Rate: $${station.pricePerHour || 0}/hour</p>
-                        <p><strong>Total: $<span id="totalPrice">${(station.pricePerHour || 0) * 2}</span></strong></p>
+                    <div class="price-summary" style="background-color: #f8fafc; padding: 1rem; border-radius: var(--radius-sm); margin-top: 1rem;">
+                        <h4 style="margin-bottom: 0.5rem; color: var(--secondary-color);">Price Summary</h4>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+                            <div>Duration:</div>
+                            <div><span id="durationDisplay">${defaultDuration}</span> hours</div>
+                            <div>Rate:</div>
+                            <div>$${pricePerHour.toFixed(2)}/hour</div>
+                            <div style="font-weight: 600; margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid #e2e8f0; grid-column: 1 / -1;">
+                                <div style="display: flex; justify-content: space-between;">
+                                    <span>Total:</span>
+                                    <span>$<span id="totalPrice">${defaultTotal}</span></span>
+                                </div>
+                            </div>
+                        </div>
                     </div>
+                    <div id="slotCheckResult" class="slot-check-result" style="display: none; margin-top: 1rem; padding: 1rem; border-radius: var(--radius-sm);"></div>
                 `, [
                     { text: 'Cancel', type: 'secondary', action: 'close' },
                     { 
-                        text: 'Confirm Booking', 
+                        text: 'Check Availability', 
                         type: 'primary', 
-                        action: () => this.confirmBooking(station) 
+                        action: () => this.checkBookingAvailability() 
                     }
                 ]);
                 
-                // Update price when duration changes
                 const durationSelect = document.getElementById('duration');
                 const durationDisplay = document.getElementById('durationDisplay');
                 const totalPrice = document.getElementById('totalPrice');
@@ -3630,16 +3702,21 @@
                 if (durationSelect && durationDisplay && totalPrice) {
                     durationSelect.addEventListener('change', (e) => {
                         const duration = parseInt(e.target.value);
-                        const total = duration * (station.pricePerHour || 0);
+                        const total = (pricePerHour * duration).toFixed(2);
                         
                         durationDisplay.textContent = duration;
-                        totalPrice.textContent = total.toFixed(2);
+                        totalPrice.textContent = total;
                     });
                 }
             }
 
-            async confirmBooking(station) {
+            async checkBookingAvailability() {
                 try {
+                    if (!this.currentStation) {
+                        this.showNotification('Station information not found', 'error');
+                        return;
+                    }
+
                     this.showLoading();
                     
                     const date = document.getElementById('bookingDate').value;
@@ -3654,73 +3731,154 @@
                         return;
                     }
                     
-                    // Parse date and time
                     const startDateTime = new Date(`${date}T${startTime}`);
                     const endDateTime = new Date(startDateTime.getTime() + (duration * 60 * 60 * 1000));
                     
-                    // Check if booking is in the future
                     if (startDateTime < new Date()) {
                         this.showNotification('Booking time must be in the future', 'error');
                         this.hideLoading();
                         return;
                     }
                     
-                    // Calculate total price
-                    const totalPrice = duration * (station.pricePerHour || 0);
+                    const isSlotAvailable = await this.checkTimeSlotAvailability(this.currentStation.id, startDateTime, endDateTime);
                     
-                    // Check wallet balance
+                    const slotCheckResult = document.getElementById('slotCheckResult');
+                    if (slotCheckResult) {
+                        if (isSlotAvailable) {
+                            slotCheckResult.style.display = 'block';
+                            slotCheckResult.style.backgroundColor = '#c6f6d5';
+                            slotCheckResult.style.color = '#22543d';
+                            slotCheckResult.innerHTML = `
+                                <div style="display: flex; align-items: center; justify-content: space-between;">
+                                    <div>
+                                        <i class="fas fa-check-circle"></i> Time slot is available!
+                                    </div>
+                                    <button class="btn-success" style="padding: 8px 16px; border: none; border-radius: var(--radius-sm); cursor: pointer;" onclick="UserManager.getInstance().confirmBooking()">
+                                        Confirm Booking
+                                    </button>
+                                </div>
+                            `;
+                        } else {
+                            slotCheckResult.style.display = 'block';
+                            slotCheckResult.style.backgroundColor = '#fed7d7';
+                            slotCheckResult.style.color = '#742a2a';
+                            slotCheckResult.innerHTML = '<i class="fas fa-times-circle"></i> This time slot is not available. Please choose a different time.';
+                        }
+                    }
+                    
+                    this.hideLoading();
+                    
+                } catch (error) {
+                    console.error('Error checking booking availability:', error);
+                    this.showNotification('Error checking availability: ' + error.message, 'error');
+                    this.hideLoading();
+                }
+            }
+
+            async confirmBooking() {
+                try {
+                    if (!this.currentStation) {
+                        this.showNotification('Station information not found', 'error');
+                        return;
+                    }
+
+                    this.showLoading();
+                    
+                    const date = document.getElementById('bookingDate').value;
+                    const startTime = document.getElementById('startTime').value;
+                    const duration = parseInt(document.getElementById('duration').value);
+                    const vehicleType = document.getElementById('vehicleType').value;
+                    const licensePlate = document.getElementById('licensePlate').value;
+                    
+                    if (!date || !startTime || !duration || !vehicleType) {
+                        this.showNotification('Please fill in all required fields', 'error');
+                        this.hideLoading();
+                        return;
+                    }
+                    
+                    const startDateTime = new Date(`${date}T${startTime}`);
+                    const endDateTime = new Date(startDateTime.getTime() + (duration * 60 * 60 * 1000));
+                    
+                    if (startDateTime < new Date()) {
+                        this.showNotification('Booking time must be in the future', 'error');
+                        this.hideLoading();
+                        return;
+                    }
+                    
+                    const isSlotAvailable = await this.checkTimeSlotAvailability(this.currentStation.id, startDateTime, endDateTime);
+                    if (!isSlotAvailable) {
+                        this.showNotification('Time slot is no longer available. Please choose a different time.', 'error');
+                        this.hideLoading();
+                        return;
+                    }
+                    
+                    // FIXED: Proper price calculation
+                    const pricePerHour = parseFloat(this.currentStation.pricePerHour) || 0;
+                    const totalPrice = pricePerHour * duration;
+                    
                     if (this.userData.walletBalance < totalPrice) {
-                        this.showNotification('Insufficient wallet balance. Please add funds.', 'error');
+                        this.showNotification(`Insufficient wallet balance. You need $${totalPrice.toFixed(2)} but have $${this.userData.walletBalance.toFixed(2)}.`, 'error');
                         this.hideLoading();
                         this.addFunds();
                         return;
                     }
                     
-                    // Check slot availability again (to prevent race conditions)
-                    const availableSlots = await this.calculateAvailableSlots(station.id);
-                    if (availableSlots <= 0) {
-                        this.showNotification('No slots available. Please choose another time.', 'error');
-                        this.hideLoading();
-                        return;
-                    }
+                    // FIXED: Properly handle station coordinates - check if they exist
+                    const stationCoordinates = this.currentStation.coordinates || null;
                     
-                    // Create booking
                     const bookingData = {
-                        stationId: station.id,
-                        stationName: station.name,
+                        stationId: this.currentStation.id,
+                        stationName: this.currentStation.name,
+                        stationAddress: this.currentStation.address || '',
+                        stationCity: this.currentStation.city || '',
+                        stationState: this.currentStation.state || '',
+                        // FIXED: Only include coordinates if they exist
+                        stationCoordinates: stationCoordinates,
                         userId: this.user.uid,
                         userName: this.userData.name,
                         userEmail: this.user.email,
+                        userPhone: this.userData.phone || '',
                         startTime: firebase.firestore.Timestamp.fromDate(startDateTime),
                         endTime: firebase.firestore.Timestamp.fromDate(endDateTime),
                         duration: duration,
+                        pricePerHour: pricePerHour,
                         vehicleType: vehicleType,
                         licensePlate: licensePlate || '',
                         totalPrice: totalPrice,
-                        status: 'pending',
-                        paymentStatus: 'pending',
-                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                        status: 'confirmed',
+                        paymentStatus: 'paid',
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                        confirmedAt: firebase.firestore.FieldValue.serverTimestamp()
                     };
                     
-                    // Add booking to Firestore
-                    const bookingRef = await db.collection('bookings').add(bookingData);
+                    const batch = db.batch();
                     
-                    // Deduct from wallet
+                    const bookingRef = db.collection('bookings').doc();
+                    batch.set(bookingRef, bookingData);
+                    
                     const newBalance = this.userData.walletBalance - totalPrice;
-                    await db.collection('users').doc(this.user.uid).update({
-                        walletBalance: newBalance
+                    const userRef = db.collection('users').doc(this.user.uid);
+                    batch.update(userRef, {
+                        walletBalance: newBalance,
+                        totalBookings: firebase.firestore.FieldValue.increment(1)
                     });
+                    
+                    await batch.commit();
                     
                     // Update local data
                     this.userData.walletBalance = newBalance;
+                    this.userData.totalBookings = (this.userData.totalBookings || 0) + 1;
+                    
+                    // Update UI immediately
                     this.updateUserInfo();
                     this.updateNavbarUserInfo();
+                    this.updateDashboardStats();
                     
-                    // Add activity
+                    // Add activity log
                     try {
                         await db.collection('activities').add({
                             userId: this.user.uid,
-                            message: `Booked ${station.name} for ${date}`,
+                            message: `Booked ${this.currentStation.name} for ${date} at ${startTime} for ${duration} hours`,
                             icon: 'calendar-check',
                             timestamp: firebase.firestore.FieldValue.serverTimestamp()
                         });
@@ -3728,12 +3886,29 @@
                         console.log('Activity creation skipped');
                     }
                     
-                    this.showNotification('Booking created successfully!', 'success');
+                    // Add transaction record
+                    try {
+                        await db.collection('transactions').add({
+                            userId: this.user.uid,
+                            type: 'payment',
+                            amount: totalPrice,
+                            description: `Booking at ${this.currentStation.name}`,
+                            bookingId: bookingRef.id,
+                            stationId: this.currentStation.id,
+                            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                    } catch (error) {
+                        console.log('Transaction record creation skipped');
+                    }
+                    
+                    this.showNotification(`Booking confirmed successfully for $${totalPrice.toFixed(2)}!`, 'success');
                     this.closeModal();
                     
-                    // Refresh data
-                    this.loadBookings();
+                    this.currentStation = null;
+                    
+                    // Force refresh of data
                     this.loadStations();
+                    this.loadBookings();
                     
                     this.hideLoading();
                     
@@ -3756,28 +3931,28 @@
                     const amountNum = parseFloat(amount);
                     const newBalance = (this.userData.walletBalance || 0) + amountNum;
                     
-                    await db.collection('users').doc(this.user.uid).update({
+                    const batch = db.batch();
+                    
+                    const userRef = db.collection('users').doc(this.user.uid);
+                    batch.update(userRef, {
                         walletBalance: newBalance
                     });
+                    
+                    const transactionRef = db.collection('transactions').doc();
+                    batch.set(transactionRef, {
+                        userId: this.user.uid,
+                        type: 'deposit',
+                        amount: amountNum,
+                        paymentMethod: paymentMethod,
+                        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    
+                    await batch.commit();
                     
                     this.userData.walletBalance = newBalance;
                     this.updateUserInfo();
                     this.updateNavbarUserInfo();
                     
-                    // Add transaction record
-                    try {
-                        await db.collection('transactions').add({
-                            userId: this.user.uid,
-                            type: 'deposit',
-                            amount: amountNum,
-                            paymentMethod: paymentMethod,
-                            timestamp: firebase.firestore.FieldValue.serverTimestamp()
-                        });
-                    } catch (error) {
-                        console.log('Transaction record creation skipped');
-                    }
-
-                    // Add activity
                     try {
                         await db.collection('activities').add({
                             userId: this.user.uid,
@@ -3801,7 +3976,6 @@
 
             async cancelBooking(bookingId) {
                 try {
-                    // Get booking details
                     const bookingDoc = await db.collection('bookings').doc(bookingId).get();
                     if (!bookingDoc.exists) {
                         this.showNotification('Booking not found', 'error');
@@ -3810,40 +3984,52 @@
                     
                     const booking = bookingDoc.data();
                     
-                    // Check if booking can be cancelled
                     if (booking.status === 'cancelled' || booking.status === 'completed') {
                         this.showNotification('This booking cannot be cancelled', 'error');
                         return;
                     }
                     
-                    // Ask for confirmation
                     if (!confirm('Are you sure you want to cancel this booking?')) {
                         return;
                     }
                     
                     this.showLoading();
                     
-                    // Update booking status
-                    await db.collection('bookings').doc(bookingId).update({
+                    const batch = db.batch();
+                    
+                    const bookingRef = db.collection('bookings').doc(bookingId);
+                    batch.update(bookingRef, {
                         status: 'cancelled',
                         cancelledAt: firebase.firestore.FieldValue.serverTimestamp()
                     });
                     
-                    // Refund to wallet if payment was made
                     if (booking.paymentStatus === 'paid' || booking.status === 'confirmed') {
                         const refundAmount = booking.totalPrice || 0;
                         const newBalance = (this.userData.walletBalance || 0) + refundAmount;
                         
-                        await db.collection('users').doc(this.user.uid).update({
+                        const userRef = db.collection('users').doc(this.user.uid);
+                        batch.update(userRef, {
                             walletBalance: newBalance
                         });
                         
                         this.userData.walletBalance = newBalance;
                         this.updateUserInfo();
                         this.updateNavbarUserInfo();
+                        
+                        // Add refund transaction
+                        const transactionRef = db.collection('transactions').doc();
+                        batch.set(transactionRef, {
+                            userId: this.user.uid,
+                            type: 'refund',
+                            amount: refundAmount,
+                            description: `Refund for cancelled booking at ${booking.stationName}`,
+                            bookingId: bookingId,
+                            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                        });
                     }
                     
-                    // Add activity
+                    await batch.commit();
+                    
                     try {
                         await db.collection('activities').add({
                             userId: this.user.uid,
@@ -3857,8 +4043,8 @@
                     
                     this.showNotification('Booking cancelled successfully', 'success');
                     
-                    // Refresh data
                     this.loadBookings();
+                    this.loadStations();
                     
                     this.hideLoading();
                     
@@ -3870,85 +4056,184 @@
             }
 
             viewStationDetails(stationId) {
-                this.showNotification('Station details feature coming soon!', 'info');
+                const station = this.stations.find(s => s.id === stationId);
+                if (!station) {
+                    this.showNotification('Station not found', 'error');
+                    return;
+                }
+
+                const detailsContent = `
+                    <div class="station-details">
+                        <h3>${station.name}${station.isActive === false ? ' (Inactive)' : ''}</h3>
+                        <div class="details-grid">
+                            <div class="detail-item">
+                                <i class="fas fa-map-marker-alt"></i>
+                                <div>
+                                    <strong>Address:</strong>
+                                    <p>${station.address || 'N/A'}</p>
+                                    ${station.city ? `<p>${station.city}, ${station.state || ''} ${station.zip || ''}</p>` : ''}
+                                </div>
+                            </div>
+                            <div class="detail-item">
+                                <i class="fas fa-bolt"></i>
+                                <div>
+                                    <strong>Charger Type:</strong>
+                                    <p>${station.chargerType === 'fast' ? 'Fast Charging' : 'Normal Charging'}</p>
+                                </div>
+                            </div>
+                            <div class="detail-item">
+                                <i class="fas fa-car"></i>
+                                <div>
+                                    <strong>Available Slots:</strong>
+                                    <p>${station.availableSlots || 0}/${station.totalSlots || 0}</p>
+                                </div>
+                            </div>
+                            <div class="detail-item">
+                                <i class="fas fa-dollar-sign"></i>
+                                <div>
+                                    <strong>Price:</strong>
+                                    <p>$${(station.pricePerHour || 0).toFixed(2)}/hour</p>
+                                </div>
+                            </div>
+                            <div class="detail-item">
+                                <i class="fas fa-info-circle"></i>
+                                <div>
+                                    <strong>Status:</strong>
+                                    <p>${station.isActive === false ? 'Inactive' : 'Active'}</p>
+                                </div>
+                            </div>
+                            ${station.contactNumber ? `
+                            <div class="detail-item">
+                                <i class="fas fa-phone"></i>
+                                <div>
+                                    <strong>Contact:</strong>
+                                    <p>${station.contactNumber}</p>
+                                </div>
+                            </div>` : ''}
+                            ${station.operatingHours ? `
+                            <div class="detail-item">
+                                <i class="fas fa-clock"></i>
+                                <div>
+                                    <strong>Operating Hours:</strong>
+                                    <p>${station.operatingHours}</p>
+                                </div>
+                            </div>` : ''}
+                            ${station.amenities ? `
+                            <div class="detail-item">
+                                <i class="fas fa-star"></i>
+                                <div>
+                                    <strong>Amenities:</strong>
+                                    <p>${station.amenities}</p>
+                                </div>
+                            </div>` : ''}
+                        </div>
+                    </div>
+                `;
+
+                this.showModal('Station Details', detailsContent, [
+                    { text: 'Close', type: 'secondary', action: 'close' },
+                    { 
+                        text: 'Book Now', 
+                        type: 'primary', 
+                        action: () => {
+                            this.closeModal();
+                            this.bookStation(stationId);
+                        },
+                        disabled: station.isActive === false
+                    }
+                ]);
             }
 
             viewBookingDetails(bookingId) {
-                this.showNotification('Booking details feature coming soon!', 'info');
-            }
+                const booking = this.bookings.find(b => b.id === bookingId);
+                if (!booking) {
+                    this.showNotification('Booking not found', 'error');
+                    return;
+                }
 
-            changePassword() {
-                this.showModal('Change Password', `
-                    <div class="form-group">
-                        <label for="currentPassword">Current Password</label>
-                        <input type="password" id="currentPassword" placeholder="Enter current password">
+                let startTime = 'N/A';
+                let endTime = 'N/A';
+                let date = 'N/A';
+                
+                try {
+                    startTime = booking.startTime?.toDate();
+                    endTime = booking.endTime?.toDate();
+                    date = startTime ? startTime.toLocaleDateString() : 'N/A';
+                    startTime = startTime ? startTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'N/A';
+                    endTime = endTime ? endTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'N/A';
+                } catch (error) {
+                    console.error('Error formatting booking time:', error);
+                }
+
+                const detailsContent = `
+                    <div class="booking-details">
+                        <h3>Booking Details</h3>
+                        <div class="details-grid">
+                            <div class="detail-item">
+                                <i class="fas fa-charging-station"></i>
+                                <div>
+                                    <strong>Station:</strong>
+                                    <p>${booking.stationName || 'Unknown Station'}</p>
+                                    ${booking.stationAddress ? `<p style="font-size: 0.9em; color: #718096;">${booking.stationAddress}</p>` : ''}
+                                </div>
+                            </div>
+                            <div class="detail-item">
+                                <i class="fas fa-calendar"></i>
+                                <div>
+                                    <strong>Date:</strong>
+                                    <p>${date}</p>
+                                </div>
+                            </div>
+                            <div class="detail-item">
+                                <i class="fas fa-clock"></i>
+                                <div>
+                                    <strong>Time:</strong>
+                                    <p>${startTime} - ${endTime}</p>
+                                </div>
+                            </div>
+                            <div class="detail-item">
+                                <i class="fas fa-hourglass-half"></i>
+                                <div>
+                                    <strong>Duration:</strong>
+                                    <p>${booking.duration || 'N/A'} hours</p>
+                                </div>
+                            </div>
+                            <div class="detail-item">
+                                <i class="fas fa-car"></i>
+                                <div>
+                                    <strong>Vehicle:</strong>
+                                    <p>${booking.vehicleType || 'N/A'}</p>
+                                    ${booking.licensePlate ? `<p style="font-size: 0.9em; color: #718096;">License: ${booking.licensePlate}</p>` : ''}
+                                </div>
+                            </div>
+                            <div class="detail-item">
+                                <i class="fas fa-dollar-sign"></i>
+                                <div>
+                                    <strong>Total Price:</strong>
+                                    <p>$${(booking.totalPrice || 0).toFixed(2)}</p>
+                                    ${booking.pricePerHour ? `<p style="font-size: 0.9em; color: #718096;">Rate: $${booking.pricePerHour.toFixed(2)}/hour</p>` : ''}
+                                </div>
+                            </div>
+                            <div class="detail-item">
+                                <i class="fas fa-info-circle"></i>
+                                <div>
+                                    <strong>Status:</strong>
+                                    <p>${(booking.status || 'pending').charAt(0).toUpperCase() + (booking.status || 'pending').slice(1)}</p>
+                                </div>
+                            </div>
+                            <div class="detail-item">
+                                <i class="fas fa-receipt"></i>
+                                <div>
+                                    <strong>Payment:</strong>
+                                    <p>${(booking.paymentStatus || 'pending').charAt(0).toUpperCase() + (booking.paymentStatus || 'pending').slice(1)}</p>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label for="newPassword">New Password</label>
-                        <input type="password" id="newPassword" placeholder="Enter new password">
-                    </div>
-                    <div class="form-group">
-                        <label for="confirmPassword">Confirm New Password</label>
-                        <input type="password" id="confirmPassword" placeholder="Confirm new password">
-                    </div>
-                `, [
-                    { text: 'Cancel', type: 'secondary', action: 'close' },
-                    { 
-                        text: 'Change Password', 
-                        type: 'primary', 
-                        action: async () => {
-                            this.showLoading();
-                            
-                            const currentPassword = document.getElementById('currentPassword').value;
-                            const newPassword = document.getElementById('newPassword').value;
-                            const confirmPassword = document.getElementById('confirmPassword').value;
+                `;
 
-                            if (!currentPassword || !newPassword || !confirmPassword) {
-                                this.showNotification('Please fill in all fields', 'error');
-                                this.hideLoading();
-                                return;
-                            }
-
-                            if (newPassword !== confirmPassword) {
-                                this.showNotification('New passwords do not match', 'error');
-                                this.hideLoading();
-                                return;
-                            }
-
-                            if (newPassword.length < 6) {
-                                this.showNotification('Password must be at least 6 characters', 'error');
-                                this.hideLoading();
-                                return;
-                            }
-
-                            try {
-                                // Re-authenticate user
-                                const credential = firebase.auth.EmailAuthProvider.credential(
-                                    this.user.email, 
-                                    currentPassword
-                                );
-                                
-                                await this.user.reauthenticateWithCredential(credential);
-                                
-                                // Update password
-                                await this.user.updatePassword(newPassword);
-                                
-                                this.showNotification('Password changed successfully!', 'success');
-                                this.closeModal();
-                            } catch (error) {
-                                console.error('Error changing password:', error);
-                                if (error.code === 'auth/wrong-password') {
-                                    this.showNotification('Current password is incorrect', 'error');
-                                } else if (error.code === 'auth/weak-password') {
-                                    this.showNotification('Password is too weak', 'error');
-                                } else {
-                                    this.showNotification('Error changing password: ' + error.message, 'error');
-                                }
-                            }
-                            
-                            this.hideLoading();
-                        }
-                    }
+                this.showModal('Booking Details', detailsContent, [
+                    { text: 'Close', type: 'secondary', action: 'close' }
                 ]);
             }
 
@@ -3966,7 +4251,6 @@
                     { text: 'Close', type: 'secondary', action: 'close' }
                 ]);
 
-                // Load transactions
                 this.loadTransactions();
             }
 
@@ -3995,25 +4279,35 @@
                             transactionsSnapshot.docs.forEach(doc => {
                                 const transaction = doc.data();
                                 let date = 'N/A';
+                                let time = 'N/A';
                                 try {
-                                    date = transaction.timestamp?.toDate().toLocaleDateString();
+                                    const timestamp = transaction.timestamp?.toDate();
+                                    if (timestamp) {
+                                        date = timestamp.toLocaleDateString();
+                                        time = timestamp.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                                    }
                                 } catch (error) {
                                     console.error('Error formatting transaction date:', error);
                                 }
-                                const typeClass = transaction.type === 'deposit' ? 'success' : 'warning';
-                                const typeIcon = transaction.type === 'deposit' ? 'plus' : 'minus';
+                                const typeClass = transaction.type === 'deposit' || transaction.type === 'refund' ? 'success' : 'warning';
+                                const typeIcon = transaction.type === 'deposit' ? 'plus' : transaction.type === 'refund' ? 'undo' : 'minus';
+                                const typeText = transaction.type === 'deposit' ? 'Wallet Deposit' : 
+                                               transaction.type === 'refund' ? 'Refund' : 
+                                               'Booking Payment';
+                                const amountPrefix = transaction.type === 'deposit' || transaction.type === 'refund' ? '+' : '-';
                                 
                                 html += `
-                                    <div class="transaction-item">
-                                        <div class="transaction-icon ${typeClass}">
-                                            <i class="fas fa-${typeIcon}"></i>
+                                    <div class="transaction-item" style="display: flex; align-items: center; padding: 1rem; border-bottom: 1px solid #e2e8f0;">
+                                        <div class="transaction-icon ${typeClass}" style="width: 40px; height: 40px; border-radius: 50%; background-color: ${typeClass === 'success' ? '#c6f6d5' : '#fed7d7'}; display: flex; align-items: center; justify-content: center; margin-right: 1rem;">
+                                            <i class="fas fa-${typeIcon}" style="color: ${typeClass === 'success' ? '#22543d' : '#742a2a'};"></i>
                                         </div>
-                                        <div class="transaction-info">
-                                            <h5>${transaction.type === 'deposit' ? 'Wallet Deposit' : 'Booking Payment'}</h5>
-                                            <p>${date} • ${transaction.paymentMethod || 'N/A'}</p>
+                                        <div class="transaction-info" style="flex: 1;">
+                                            <h5 style="margin: 0 0 0.25rem 0; color: var(--secondary-color);">${typeText}</h5>
+                                            <p style="margin: 0; color: #718096; font-size: 0.9rem;">${date} at ${time}</p>
+                                            ${transaction.description ? `<p style="margin: 0.25rem 0 0 0; color: #a0aec0; font-size: 0.85rem;">${transaction.description}</p>` : ''}
                                         </div>
-                                        <div class="transaction-amount ${typeClass}">
-                                            ${transaction.type === 'deposit' ? '+' : '-'}$${transaction.amount?.toFixed(2) || '0.00'}
+                                        <div class="transaction-amount ${typeClass}" style="font-weight: 600; color: ${typeClass === 'success' ? '#22543d' : '#742a2a'};">
+                                            ${amountPrefix}$${transaction.amount?.toFixed(2) || '0.00'}
                                         </div>
                                     </div>
                                 `;
@@ -4040,7 +4334,6 @@
                                 <i class="fas fa-exclamation-triangle"></i>
                                 <h4>Error Loading Transactions</h4>
                                 <p>Please try again later</p>
-                            </div>
                         `;
                     }
                 }
@@ -4061,13 +4354,9 @@
                 modal.id = 'currentModal';
                 modal.classList.remove('hidden');
                 
-                // Set title
                 modal.querySelector('h3').textContent = title;
-                
-                // Set content
                 modal.querySelector('.modal-body').innerHTML = content;
                 
-                // Clear existing buttons and add new ones
                 const modalFooter = modal.querySelector('.modal-footer');
                 modalFooter.innerHTML = '';
                 
@@ -4075,6 +4364,7 @@
                     const btn = document.createElement('button');
                     btn.className = `btn-${button.type}`;
                     btn.textContent = button.text;
+                    btn.disabled = button.disabled || false;
                     
                     if (button.action === 'close') {
                         btn.addEventListener('click', () => this.closeModal());
@@ -4085,10 +4375,8 @@
                     modalFooter.appendChild(btn);
                 });
                 
-                // Add close functionality
                 modal.querySelector('.close-modal').addEventListener('click', () => this.closeModal());
                 
-                // Add click outside to close
                 modal.addEventListener('click', (e) => {
                     if (e.target === modal) {
                         this.closeModal();
@@ -4162,7 +4450,6 @@
                 
                 container.appendChild(toast);
                 
-                // Auto-remove after 5 seconds
                 setTimeout(() => {
                     if (toast.parentElement) {
                         toast.remove();
@@ -4173,7 +4460,6 @@
             // Logout
             logout() {
                 auth.signOut().then(() => {
-                    // Clean up real-time listeners
                     this.realTimeListeners.forEach(unsubscribe => unsubscribe());
                     this.realTimeListeners = [];
                     
