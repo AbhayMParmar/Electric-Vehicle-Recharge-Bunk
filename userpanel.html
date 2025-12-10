@@ -2416,7 +2416,7 @@
                         <div class="quick-stat">
                             <i class="fas fa-wallet"></i>
                             <div>
-                                <h3 id="userBalance">$0.00</h3>
+                                <h3 id="userBalance">₹0.00</h3>
                                 <p>Wallet Balance</p>
                             </div>
                         </div>
@@ -2602,9 +2602,9 @@
                         </div>
                     </div>
                     <div class="stat-card">
-                        <i class="fas fa-dollar-sign"></i>
+                        <i class="fas fa-rupee-sign"></i>
                         <div>
-                            <h3 id="totalSpent">$0</h3>
+                            <h3 id="totalSpent">₹0</h3>
                             <p>Total Spent</p>
                         </div>
                     </div>
@@ -2693,7 +2693,7 @@
                         <div class="wallet-balance">
                             <div class="balance-amount">
                                 <span class="amount-label">Available Balance</span>
-                                <h2 id="walletBalance">$0.00</h2>
+                                <h2 id="walletBalance">₹0.00</h2>
                             </div>
                             <div class="wallet-actions">
                                 <button class="btn-success" onclick="UserManager.getInstance().addFunds()">
@@ -2708,10 +2708,10 @@
                         <div class="quick-add">
                             <h4>Quick Add:</h4>
                             <div class="add-options">
-                                <button class="add-option" data-amount="10">$10</button>
-                                <button class="add-option" data-amount="20">$20</button>
-                                <button class="add-option" data-amount="50">$50</button>
-                                <button class="add-option" data-amount="100">$100</button>
+                                <button class="add-option" data-amount="100">₹100</button>
+                                <button class="add-option" data-amount="200">₹200</button>
+                                <button class="add-option" data-amount="500">₹500</button>
+                                <button class="add-option" data-amount="1000">₹1000</button>
                             </div>
                         </div>
                     </div>
@@ -2813,9 +2813,9 @@
                             </div>
                         </div>
                         <div class="history-stat">
-                            <i class="fas fa-money-bill-wave"></i>
+                            <i class="fas fa-rupee-sign"></i>
                             <div>
-                                <h3 id="historySpent">$0</h3>
+                                <h3 id="historySpent">₹0</h3>
                                 <p>Total Spent</p>
                             </div>
                         </div>
@@ -3442,10 +3442,10 @@
                     const userBalance = document.getElementById('userBalance');
                     
                     if (walletBalance) {
-                        walletBalance.textContent = `$${(this.userData?.walletBalance || 0).toFixed(2)}`;
+                        walletBalance.textContent = `₹${(this.userData?.walletBalance || 0).toFixed(2)}`;
                     }
                     if (userBalance) {
-                        userBalance.textContent = `$${(this.userData?.walletBalance || 0).toFixed(2)}`;
+                        userBalance.textContent = `₹${(this.userData?.walletBalance || 0).toFixed(2)}`;
                     }
                 } catch (error) {
                     console.error('Error updating user info:', error);
@@ -3717,8 +3717,7 @@
                                 <button class="btn-primary" onclick="UserManager.getInstance().loadStations()">
                                     <i class="fas fa-sync"></i> Try Again
                                 </button>
-                            </div>
-                        `;
+                            `;
                         this.showNotification('Error loading stations: ' + error.message, 'error');
                     }
 
@@ -3734,8 +3733,7 @@
                                 <button class="btn-primary" onclick="UserManager.getInstance().loadStations()">
                                     <i class="fas fa-sync"></i> Try Again
                                 </button>
-                            </div>
-                        `;
+                            `;
                     }
                 }
             }
@@ -3804,7 +3802,7 @@
                         ${station.contactNumber ? `<p><i class="fas fa-phone"></i> ${station.contactNumber}</p>` : ''}
                         <p><i class="fas fa-bolt"></i> ${station.chargerType === 'fast' ? 'Fast Charging' : 'Normal Charging'}</p>
                         <p><i class="fas fa-car"></i> ${availableSlots}/${totalSlots} slots</p>
-                        <p><i class="fas fa-dollar-sign"></i> $${(station.pricePerHour || 0).toFixed(2)}/hour</p>
+                        <p><i class="fas fa-rupee-sign"></i> ₹${(station.pricePerHour || 0).toFixed(2)}/hour</p>
                         ${station.operatingHours ? `<p><i class="fas fa-clock"></i> ${station.operatingHours}</p>` : ''}
                         ${station.amenities ? `<p><i class="fas fa-star"></i> ${station.amenities}</p>` : ''}
                     </div>
@@ -3906,7 +3904,7 @@
                         <p style="margin: 0 0 5px 0;"><strong>Status:</strong> ${station.isActive === false ? 'Inactive' : 'Active'}</p>
                         <p style="margin: 0 0 5px 0;"><strong>Available Slots:</strong> ${availableSlots}/${totalSlots}</p>
                         <p style="margin: 0 0 5px 0;"><strong>Charger Type:</strong> ${station.chargerType || 'Normal'}</p>
-                        <p style="margin: 0 0 5px 0;"><strong>Price:</strong> $${(station.pricePerHour || 0).toFixed(2)}/hour</p>
+                        <p style="margin: 0 0 5px 0;"><strong>Price:</strong> ₹${(station.pricePerHour || 0).toFixed(2)}/hour</p>
                         ${station.operatingHours ? `<p style="margin: 0 0 5px 0;"><strong>Hours:</strong> ${station.operatingHours}</p>` : ''}
                         <button onclick="UserManager.getInstance().bookStation('${station.id}')" 
                                 style="padding: 8px 16px; background-color: ${isAvailable ? '#00a884' : '#718096'}; color: white; border: none; border-radius: 4px; cursor: ${isAvailable ? 'pointer' : 'not-allowed'}; width: 100%; margin-top: 10px;"
@@ -4308,7 +4306,7 @@
                     if (completedElement) completedElement.textContent = completedBookings;
                     if (pendingElement) pendingElement.textContent = pendingBookings;
                     if (cancelledElement) cancelledElement.textContent = cancelledCount;
-                    if (totalSpentElement) totalSpentElement.textContent = `$${totalSpent.toFixed(2)}`;
+                    if (totalSpentElement) totalSpentElement.textContent = `₹${totalSpent.toFixed(2)}`;
 
                 } catch (error) {
                     console.error('Error updating booking stats:', error);
@@ -4345,7 +4343,7 @@
                         <p><i class="fas fa-calendar"></i> ${date}</p>
                         <p><i class="fas fa-clock"></i> ${time}</p>
                         <p><i class="fas fa-hourglass-half"></i> ${booking.duration || 'N/A'} hours</p>
-                        <p><i class="fas fa-dollar-sign"></i> $${(booking.totalPrice || 0).toFixed(2)}</p>
+                        <p><i class="fas fa-rupee-sign"></i> ₹${(booking.totalPrice || 0).toFixed(2)}</p>
                     </div>
                     <div class="booking-actions">
                         ${booking.status === 'confirmed' || booking.status === 'pending' ? `
@@ -4476,7 +4474,7 @@
                                     <p><i class="fas fa-calendar"></i> ${startTime ? startTime.toLocaleDateString() : 'N/A'}</p>
                                     <p><i class="fas fa-clock"></i> ${duration} hours</p>
                                     <p><i class="fas fa-bolt"></i> ${booking.energyUsed || '0'} kWh</p>
-                                    <p><i class="fas fa-dollar-sign"></i> $${(booking.totalPrice || 0).toFixed(2)}</p>
+                                    <p><i class="fas fa-rupee-sign"></i> ₹${(booking.totalPrice || 0).toFixed(2)}</p>
                                 </div>
                             `;
                             historyList.appendChild(historyItem);
@@ -4489,7 +4487,7 @@
                         
                         if (totalSessions) totalSessions.textContent = completedBookings.length;
                         if (totalHoursElement) totalHoursElement.textContent = totalHours.toFixed(1);
-                        if (historySpent) historySpent.textContent = `$${totalSpent.toFixed(2)}`;
+                        if (historySpent) historySpent.textContent = `₹${totalSpent.toFixed(2)}`;
                         if (co2Saved) co2Saved.textContent = (totalHours * 0.4).toFixed(1);
                     }
 
@@ -4515,8 +4513,8 @@
         addFunds() {
             this.showModal('Add Funds', `
                 <div class="form-group">
-                    <label for="amount">Amount to Add ($)</label>
-                    <input type="number" id="amount" min="1" step="0.01" placeholder="Enter amount" value="20">
+                    <label for="amount">Amount to Add (₹)</label>
+                    <input type="number" id="amount" min="1" step="0.01" placeholder="Enter amount" value="200">
                 </div>
                 <div class="form-group">
                     <label for="paymentMethod">Payment Method</label>
@@ -4524,6 +4522,7 @@
                         <option value="credit">Credit Card</option>
                         <option value="debit">Debit Card</option>
                         <option value="paypal">PayPal</option>
+                        <option value="upi">UPI</option>
                     </select>
                 </div>
             `, [
@@ -4628,11 +4627,11 @@
                         <div style="color: var(--secondary-color);">Duration:</div>
                         <div style="color: var(--secondary-color);"><span id="durationDisplay">${defaultDuration}</span> hours</div>
                         <div style="color: var(--secondary-color);">Rate:</div>
-                        <div style="color: var(--secondary-color);">$${pricePerHour.toFixed(2)}/hour</div>
+                        <div style="color: var(--secondary-color);">₹${pricePerHour.toFixed(2)}/hour</div>
                         <div style="font-weight: 600; margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid #e2e8f0; grid-column: 1 / -1;">
                             <div style="display: flex; justify-content: space-between;">
                                 <span style="color: var(--secondary-color);">Total:</span>
-                                <span style="color: var(--primary-color);">$<span id="totalPrice">${defaultTotal}</span></span>
+                                <span style="color: var(--primary-color);">₹<span id="totalPrice">${defaultTotal}</span></span>
                             </div>
                         </div>
                     </div>
@@ -4769,7 +4768,7 @@
                 const totalPrice = pricePerHour * duration;
                 
                 if (this.userData.walletBalance < totalPrice) {
-                    this.showNotification(`Insufficient wallet balance. You need $${totalPrice.toFixed(2)} but have $${this.userData.walletBalance.toFixed(2)}.`, 'error');
+                    this.showNotification(`Insufficient wallet balance. You need ₹${totalPrice.toFixed(2)} but have ₹${this.userData.walletBalance.toFixed(2)}.`, 'error');
                     this.hideLoading();
                     this.addFunds();
                     return;
@@ -4853,7 +4852,7 @@
                     console.log('Transaction record creation skipped');
                 }
                 
-                this.showNotification(`Booking confirmed successfully for $${totalPrice.toFixed(2)}!`, 'success');
+                this.showNotification(`Booking confirmed successfully for ₹${totalPrice.toFixed(2)}!`, 'success');
                 this.closeModal();
                 
                 this.currentStation = null;
@@ -4908,7 +4907,7 @@
                 try {
                     await db.collection('activities').add({
                         userId: this.user.uid,
-                        message: `Added $${amountNum.toFixed(2)} to wallet`,
+                        message: `Added ₹${amountNum.toFixed(2)} to wallet`,
                         icon: 'wallet',
                         timestamp: firebase.firestore.Timestamp.now()
                     });
@@ -4916,7 +4915,7 @@
                     console.log('Activity creation skipped');
                 }
 
-                this.showNotification(`Successfully added $${amountNum.toFixed(2)} to your wallet`, 'success');
+                this.showNotification(`Successfully added ₹${amountNum.toFixed(2)} to your wallet`, 'success');
                 this.closeModal();
                 this.hideLoading();
             } catch (error) {
@@ -5041,10 +5040,10 @@
                             </div>
                         </div>
                         <div class="detail-item">
-                            <i class="fas fa-dollar-sign"></i>
+                            <i class="fas fa-rupee-sign"></i>
                             <div>
                                 <strong>Price:</strong>
-                                <p>$${(station.pricePerHour || 0).toFixed(2)}/hour</p>
+                                <p>₹${(station.pricePerHour || 0).toFixed(2)}/hour</p>
                             </div>
                         </div>
                         <div class="detail-item">
@@ -5168,11 +5167,11 @@
                             </div>
                         </div>
                         <div class="detail-item">
-                            <i class="fas fa-dollar-sign"></i>
+                            <i class="fas fa-rupee-sign"></i>
                             <div>
                                 <strong>Total Price:</strong>
-                                <p>$${(booking.totalPrice || 0).toFixed(2)}</p>
-                                ${booking.pricePerHour ? `<p style="font-size: 0.9em; color: #718096;">Rate: $${booking.pricePerHour.toFixed(2)}/hour</p>` : ''}
+                                <p>₹${(booking.totalPrice || 0).toFixed(2)}</p>
+                                ${booking.pricePerHour ? `<p style="font-size: 0.9em; color: #718096;">Rate: ₹${booking.pricePerHour.toFixed(2)}/hour</p>` : ''}
                             </div>
                         </div>
                         <div class="detail-item">
@@ -5285,22 +5284,22 @@
                         <div class="transactions-summary">
                             <div class="summary-stats">
                                 <div class="summary-stat deposit">
-                                    <div class="amount">$${totalDeposits.toFixed(2)}</div>
+                                    <div class="amount">₹${totalDeposits.toFixed(2)}</div>
                                     <div class="label">Total Deposits</div>
                                 </div>
                                 <div class="summary-stat payment">
-                                    <div class="amount">$${totalPayments.toFixed(2)}</div>
+                                    <div class="amount">₹${totalPayments.toFixed(2)}</div>
                                     <div class="label">Total Payments</div>
                                 </div>
                                 <div class="summary-stat refund">
-                                    <div class="amount">$${totalRefunds.toFixed(2)}</div>
+                                    <div class="amount">₹${totalRefunds.toFixed(2)}</div>
                                     <div class="label">Total Refunds</div>
                                 </div>
                             </div>
                             <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e2e8f0;">
                                 <div style="display: flex; justify-content: space-between; align-items: center;">
                                     <div style="color: var(--secondary-color); font-weight: 600;">Current Balance:</div>
-                                    <div style="color: var(--primary-color); font-weight: 700; font-size: 1.25rem;">$${(this.userData?.walletBalance || 0).toFixed(2)}</div>
+                                    <div style="color: var(--primary-color); font-weight: 700; font-size: 1.25rem;">₹${(this.userData?.walletBalance || 0).toFixed(2)}</div>
                                 </div>
                             </div>
                         </div>
@@ -5383,7 +5382,7 @@
                                     ${transaction.bookingId ? `<div class="transaction-id">Booking ID: ${transaction.bookingId}</div>` : ''}
                                 </div>
                                 <div class="transaction-amount ${transactionClass}">
-                                    ${amountPrefix}$${(transaction.amount || 0).toFixed(2)}
+                                    ${amountPrefix}₹${(transaction.amount || 0).toFixed(2)}
                                 </div>
                             </div>
                         `;
