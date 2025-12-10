@@ -1214,9 +1214,9 @@
                 </div>
                 <div class="stat-card" id="statRevenue" data-target="#reports">
                     <div class="stat-icon green">
-                        <i class="fas fa-dollar-sign"></i>
+                        <i class="fas fa-rupee-sign"></i> <!-- Changed from dollar-sign to rupee-sign -->
                     </div>
-                    <h3 id="totalRevenue">$0.00</h3>
+                    <h3 id="totalRevenue">₹0.00</h3> <!-- Changed from $ to ₹ -->
                     <p>Total Revenue</p>
                     <div class="view-link">View Reports →</div>
                 </div>
@@ -1280,9 +1280,9 @@
                             <small class="text-muted">All slots will be available initially.</small>
                         </div>
                         <div class="form-group required">
-                            <label for="pricePerHour">Price per Hour ($)</label>
+                            <label for="pricePerHour">Price per Hour (₹)</label> <!-- Changed from $ to ₹ -->
                             <input type="number" id="pricePerHour" class="form-control" required step="0.01" min="0"
-                                placeholder="e.g., 5.00">
+                                placeholder="e.g., 50.00"> <!-- Changed placeholder amount -->
                         </div>
                     </div>
 
@@ -1458,15 +1458,15 @@
                 <div class="reports-grid">
                     <div class="report-card">
                         <h3><i class="fas fa-calendar-alt"></i> Today's Revenue</h3>
-                        <h2 id="todayRevenue">$0.00</h2>
+                        <h2 id="todayRevenue">₹0.00</h2> <!-- Changed from $ to ₹ -->
                     </div>
                     <div class="report-card">
                         <h3><i class="fas fa-calendar-week"></i> This Week</h3>
-                        <h2 id="weekRevenue">$0.00</h2>
+                        <h2 id="weekRevenue">₹0.00</h2> <!-- Changed from $ to ₹ -->
                     </div>
                     <div class="report-card">
                         <h3><i class="fas fa-calendar-month"></i> This Month</h3>
-                        <h2 id="monthRevenue">$0.00</h2>
+                        <h2 id="monthRevenue">₹0.00</h2> <!-- Changed from $ to ₹ -->
                     </div>
                 </div>
             </div>
@@ -1538,10 +1538,15 @@
         const totalUsers = document.getElementById('totalUsers');
         const totalRevenue = document.getElementById('totalRevenue');
 
-        // Data Arrays
+        // Data Arrays - NEW APPROACH
         let stationsData = [];
         let bookingsData = [];
         let usersData = [];
+        
+        // Track loading state to prevent duplicates
+        let isBookingsLoading = false;
+        let bookingsLastLoaded = 0;
+        const MIN_TIME_BETWEEN_LOADS = 2000; // 2 seconds minimum between loads
 
         // Initialize Date
         function updateDate() {
@@ -1562,27 +1567,23 @@
             }, 3000);
         }
 
-        // Calculate Available Slots - SIMPLIFIED VERSION
+        // Calculate Available Slots
         async function calculateAvailableSlots(stationId, totalSlots) {
             try {
-                // Get all bookings for this station without complex queries
                 const bookingsSnapshot = await db.collection('bookings').get();
                 
                 let bookedSlots = 0;
                 const now = new Date();
                 
-                // Check each booking if it overlaps with current time
                 bookingsSnapshot.forEach(doc => {
                     const booking = doc.data();
                     
-                    // Only check if stationId matches and booking is active
                     if (booking.stationId === stationId && 
                         ['pending', 'confirmed', 'active'].includes(booking.status)) {
                         
                         const startTime = booking.startTime?.toDate();
                         const endTime = booking.endTime?.toDate();
                         
-                        // If booking times exist and current time is within booking period
                         if (startTime && endTime) {
                             if (now >= startTime && now <= endTime) {
                                 bookedSlots++;
@@ -1591,7 +1592,6 @@
                     }
                 });
                 
-                // Calculate available slots
                 const availableSlots = Math.max(0, totalSlots - bookedSlots);
                 
                 return {
@@ -1688,16 +1688,14 @@
             }
         });
 
-        // Check for Duplicate Station - SIMPLIFIED
+        // Check for Duplicate Station
         async function checkDuplicateStation(stationData) {
             try {
-                // Get all stations and check manually
                 const snapshot = await db.collection('stations').get();
                 
                 for (const doc of snapshot.docs) {
                     const existingStation = doc.data();
                     
-                    // Check name (case insensitive)
                     if (existingStation.name && existingStation.name.toLowerCase() === stationData.name.toLowerCase()) {
                         return {
                             isDuplicate: true,
@@ -1705,7 +1703,6 @@
                         };
                     }
                     
-                    // Check address
                     if (existingStation.address === stationData.address && 
                         existingStation.city === stationData.city) {
                         return {
@@ -1722,10 +1719,9 @@
             }
         }
 
-        // Load Stations - SIMPLIFIED
+        // Load Stations
         async function loadStations() {
             try {
-                // SIMPLIFIED: Get all stations and filter client-side
                 const snapshot = await db.collection('stations').get();
                 
                 stationsData = [];
@@ -1751,13 +1747,12 @@
                 for (const doc of snapshot.docs) {
                     const station = { id: doc.id, ...doc.data() };
                     
-                    // Filter active stations client-side
                     if (station.isActive !== false) {
                         activeStations.push(station);
                     }
                 }
                 
-                // Sort by creation date client-side
+                // Sort by creation date
                 activeStations.sort((a, b) => {
                     const dateA = a.createdAt ? new Date(a.createdAt) : new Date(0);
                     const dateB = b.createdAt ? new Date(b.createdAt) : new Date(0);
@@ -1769,7 +1764,6 @@
                     
                     const availability = await calculateAvailableSlots(station.id, station.totalSlots);
                     
-                    // Determine status
                     let statusBadge = '<span class="badge badge-success">Available</span>';
                     if (availability.availableSlots <= 0) {
                         statusBadge = '<span class="badge badge-danger">Full</span>';
@@ -1799,7 +1793,6 @@
                     stationsTableBody.appendChild(row);
                 }
                 
-                // Update stats
                 updateStats();
             } catch (error) {
                 console.error('Error loading stations:', error);
@@ -1850,14 +1843,11 @@
             }
 
             try {
-                // Show loading
                 const originalText = submitBtn.innerHTML;
                 submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
                 submitBtn.disabled = true;
 
-                // If editing, skip duplicate check for the same document
                 if (!isEditing) {
-                    // Check for duplicates before adding new station
                     const duplicateCheck = await checkDuplicateStation(stationData);
                     
                     if (duplicateCheck.isDuplicate) {
@@ -1867,11 +1857,9 @@
                         return;
                     }
                     
-                    // Add new station
                     await db.collection('stations').add(stationData);
                     showNotification('Station added successfully! All slots are available initially.', 'success');
                 } else {
-                    // Update existing station
                     await db.collection('stations').doc(isEditing).update(stationData);
                     showNotification('Station updated successfully!', 'success');
                     submitBtn.innerHTML = '<i class="fas fa-plus"></i> Add Station';
@@ -1907,10 +1895,9 @@
             }
         });
 
-        // Load Stations for Slot Information Display - SIMPLIFIED
+        // Load Stations for Slot Information Display
         async function loadStationsForSlotInfo() {
             try {
-                // Get all stations and filter client-side
                 const snapshot = await db.collection('stations').get();
                 
                 selectStationForSlots.innerHTML = '<option value="">Select a station</option>';
@@ -1923,7 +1910,6 @@
                     }
                 });
                 
-                // Sort by name client-side
                 activeStations.sort((a, b) => {
                     const nameA = a.name || '';
                     const nameB = b.name || '';
@@ -1938,7 +1924,6 @@
                     selectStationForSlots.appendChild(option);
                 });
 
-                // Add event listener to show slot info
                 selectStationForSlots.addEventListener('change', async function() {
                     const stationId = this.value;
                     const selectedOption = this.options[this.selectedIndex];
@@ -1972,95 +1957,235 @@
             }
         }
 
-        // Load Bookings - SIMPLIFIED
+        // ========== BOOKINGS LOADING - COMPLETELY NEW APPROACH ==========
+        
+        // Create a Map to store bookings by ID (prevents duplicates)
+        const bookingsMap = new Map();
+        
+        // Load Bookings - GUARANTEED NO DUPLICATES
         async function loadBookings() {
+            // Prevent multiple simultaneous loads
+            if (isBookingsLoading) {
+                console.log('Bookings already loading, skipping...');
+                return;
+            }
+            
+            // Prevent rapid reloads
+            const now = Date.now();
+            if (now - bookingsLastLoaded < MIN_TIME_BETWEEN_LOADS) {
+                console.log('Bookings loaded recently, skipping...');
+                return;
+            }
+            
             try {
-                // Get all bookings and sort client-side
-                const snapshot = await db.collection('bookings').get();
+                // Set loading state
+                isBookingsLoading = true;
+                bookingsLastLoaded = now;
                 
-                bookingsData = [];
-                bookingsTableBody.innerHTML = '';
+                // Show loading state
+                bookingsTableBody.innerHTML = `
+                    <tr>
+                        <td colspan="8" class="text-center">
+                            <div class="empty-state">
+                                <i class="fas fa-spinner fa-spin"></i>
+                                <h3>Loading Bookings...</h3>
+                                <p class="text-muted">Please wait while we fetch your bookings</p>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+
+                // Get ALL bookings from Firebase
+                const snapshot = await db.collection('bookings').get();
 
                 if (snapshot.empty) {
+                    // Clear the map since there are no bookings
+                    bookingsMap.clear();
+                    bookingsData = [];
+                    
                     bookingsTableBody.innerHTML = `
                         <tr>
                             <td colspan="8" class="text-center">
                                 <div class="empty-state">
                                     <i class="fas fa-book"></i>
-                                    <h3>No Active Bookings</h3>
+                                    <h3>No Bookings Found</h3>
                                     <p class="text-muted">All bookings will appear here</p>
                                 </div>
                             </td>
                         </tr>
                     `;
+                    
+                    isBookingsLoading = false;
+                    updateStats();
                     return;
                 }
 
-                const allBookings = [];
+                // Create a temporary map for this load
+                const tempBookingsMap = new Map();
+                
+                // Process each document
+                const processingPromises = [];
+                
                 snapshot.forEach(doc => {
-                    allBookings.push({ id: doc.id, ...doc.data() });
+                    const bookingId = doc.id;
+                    const bookingData = doc.data();
+                    
+                    // Skip if already in temp map (shouldn't happen but just in case)
+                    if (tempBookingsMap.has(bookingId)) {
+                        console.log(`Duplicate booking ID in snapshot: ${bookingId}`);
+                        return;
+                    }
+                    
+                    // Create a processing promise for this booking
+                    const processPromise = (async () => {
+                        try {
+                            // Calculate amount
+                            let amount = 0;
+                            
+                            if (bookingData.totalAmount !== undefined && bookingData.totalAmount !== null) {
+                                amount = parseFloat(bookingData.totalAmount);
+                            } else if (bookingData.amount !== undefined && bookingData.amount !== null) {
+                                amount = parseFloat(bookingData.amount);
+                            } else if (bookingData.price !== undefined && bookingData.price !== null) {
+                                amount = parseFloat(bookingData.price);
+                            } else if (bookingData.stationId) {
+                                // Try to get station price
+                                try {
+                                    const stationDoc = await db.collection('stations').doc(bookingData.stationId).get();
+                                    if (stationDoc.exists) {
+                                        const stationData = stationDoc.data();
+                                        const pricePerHour = stationData.pricePerHour || 50;
+                                        const duration = bookingData.duration || 2;
+                                        amount = pricePerHour * duration;
+                                    }
+                                } catch (error) {
+                                    console.error('Error fetching station data:', error);
+                                    amount = bookingData.duration ? bookingData.duration * 50 : 100;
+                                }
+                            } else {
+                                amount = bookingData.duration ? bookingData.duration * 50 : 100;
+                            }
+                            
+                            // Add to temp map
+                            tempBookingsMap.set(bookingId, {
+                                id: bookingId,
+                                ...bookingData,
+                                calculatedAmount: amount
+                            });
+                            
+                        } catch (error) {
+                            console.error(`Error processing booking ${bookingId}:`, error);
+                        }
+                    })();
+                    
+                    processingPromises.push(processPromise);
                 });
                 
-                // Sort by creation date client-side (descending)
-                allBookings.sort((a, b) => {
+                // Wait for all bookings to be processed
+                await Promise.all(processingPromises);
+                
+                // Replace the main map with the new data
+                bookingsMap.clear();
+                tempBookingsMap.forEach((value, key) => {
+                    bookingsMap.set(key, value);
+                });
+                
+                // Convert map to array
+                bookingsData = Array.from(bookingsMap.values());
+                
+                // Sort by creation date (newest first)
+                bookingsData.sort((a, b) => {
                     const dateA = a.createdAt ? (a.createdAt.toDate ? a.createdAt.toDate() : new Date(a.createdAt)) : new Date(0);
                     const dateB = b.createdAt ? (b.createdAt.toDate ? b.createdAt.toDate() : new Date(b.createdAt)) : new Date(0);
                     return dateB - dateA;
                 });
                 
-                // Take first 50
-                const recentBookings = allBookings.slice(0, 50);
+                // Clear and rebuild table
+                bookingsTableBody.innerHTML = '';
                 
-                recentBookings.forEach(booking => {
-                    bookingsData.push(booking);
-                    
-                    const bookingDate = booking.createdAt ? 
-                        (booking.createdAt.toDate ? booking.createdAt.toDate() : new Date(booking.createdAt)) : 
-                        new Date();
-                    
-                    const formattedDate = bookingDate.toLocaleDateString() + ' ' + 
-                                         bookingDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-
-                    let statusBadge = '<span class="badge badge-info">Pending</span>';
-                    if (booking.status === 'confirmed') {
-                        statusBadge = '<span class="badge badge-success">Confirmed</span>';
-                    } else if (booking.status === 'cancelled') {
-                        statusBadge = '<span class="badge badge-danger">Cancelled</span>';
-                    } else if (booking.status === 'active') {
-                        statusBadge = '<span class="badge badge-warning">Active</span>';
-                    } else if (booking.status === 'completed') {
-                        statusBadge = '<span class="badge badge-info">Completed</span>';
-                    }
-
-                    const row = document.createElement('tr');
-                    row.innerHTML = `
-                        <td>${booking.id.substring(0, 8)}</td>
-                        <td>${booking.userName || 'User'}</td>
-                        <td>${booking.stationName || 'Station'}</td>
-                        <td>${formattedDate}</td>
-                        <td>${booking.duration || 2} hours</td>
-                        <td>$${(booking.totalAmount || booking.amount || 0).toFixed(2)}</td>
-                        <td>${statusBadge}</td>
-                        <td>
-                            <div class="action-buttons">
-                                <button class="btn btn-sm btn-edit" onclick="manageBooking('${booking.id}', 'confirm')">
-                                    <i class="fas fa-check"></i>
-                                </button>
-                                <button class="btn btn-sm btn-delete" onclick="manageBooking('${booking.id}', 'cancel')">
-                                    <i class="fas fa-times"></i>
-                                </button>
-                            </div>
-                        </td>
+                if (bookingsData.length === 0) {
+                    bookingsTableBody.innerHTML = `
+                        <tr>
+                            <td colspan="8" class="text-center">
+                                <div class="empty-state">
+                                    <i class="fas fa-book"></i>
+                                    <h3>No Bookings Found</h3>
+                                    <p class="text-muted">All bookings will appear here</p>
+                                </div>
+                            </td>
+                        </tr>
                     `;
-                    bookingsTableBody.appendChild(row);
-                });
+                } else {
+                    // Create rows for each booking
+                    bookingsData.forEach(booking => {
+                        const bookingDate = booking.createdAt ? 
+                            (booking.createdAt.toDate ? booking.createdAt.toDate() : new Date(booking.createdAt)) : 
+                            new Date();
+                        
+                        const formattedDate = bookingDate.toLocaleDateString() + ' ' + 
+                                            bookingDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+
+                        let statusBadge = '<span class="badge badge-info">Pending</span>';
+                        if (booking.status === 'confirmed') {
+                            statusBadge = '<span class="badge badge-success">Confirmed</span>';
+                        } else if (booking.status === 'cancelled') {
+                            statusBadge = '<span class="badge badge-danger">Cancelled</span>';
+                        } else if (booking.status === 'active') {
+                            statusBadge = '<span class="badge badge-warning">Active</span>';
+                        } else if (booking.status === 'completed') {
+                            statusBadge = '<span class="badge badge-info">Completed</span>';
+                        }
+
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td>${booking.id.substring(0, 8)}</td>
+                            <td>${booking.userName || booking.userEmail || booking.userId || 'User'}</td>
+                            <td>${booking.stationName || booking.station || 'Station'}</td>
+                            <td>${formattedDate}</td>
+                            <td>${booking.duration || 2} hours</td>
+                            <td>₹${(booking.calculatedAmount || 0).toFixed(2)}</td>
+                            <td>${statusBadge}</td>
+                            <td>
+                                <div class="action-buttons">
+                                    <button class="btn btn-sm btn-edit" onclick="manageBooking('${booking.id}', 'confirm')">
+                                        <i class="fas fa-check"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-delete" onclick="manageBooking('${booking.id}', 'cancel')">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        `;
+                        bookingsTableBody.appendChild(row);
+                    });
+                }
+                
+                console.log(`Loaded ${bookingsData.length} unique bookings`);
+                
             } catch (error) {
                 console.error('Error loading bookings:', error);
+                bookingsTableBody.innerHTML = `
+                    <tr>
+                        <td colspan="8" class="text-center">
+                            <div class="empty-state">
+                                <i class="fas fa-exclamation-triangle"></i>
+                                <h3>Error Loading Bookings</h3>
+                                <p class="text-muted">${error.message}</p>
+                            </div>
+                        </td>
+                    </tr>
+                `;
                 showNotification('Error loading bookings', 'error');
+            } finally {
+                // Reset loading state
+                isBookingsLoading = false;
+                
+                // Update stats
+                updateStats();
             }
         }
 
-        // Manage Booking (global function)
+        // Manage Booking
         window.manageBooking = async function(bookingId, action) {
             if (!confirm(`Are you sure you want to ${action} this booking?`)) {
                 return;
@@ -2083,10 +2208,12 @@
                     showNotification('Booking cancelled!', 'success');
                 }
 
+                // Remove from map and reload
+                bookingsMap.delete(bookingId);
                 loadBookings();
                 loadStations();
                 loadStationsForSlotInfo();
-                updateStats();
+                
             } catch (error) {
                 console.error('Error managing booking:', error);
                 showNotification('Error managing booking', 'error');
@@ -2146,11 +2273,11 @@
             }
         }
 
-        // Load Reports - SIMPLIFIED
+        // Load Reports
         async function loadReports() {
             try {
-                // Get all bookings and filter client-side
-                const snapshot = await db.collection('bookings').get();
+                // Use the bookingsMap to ensure no duplicates in reports
+                const allBookings = Array.from(bookingsMap.values());
                 
                 const now = new Date();
                 const today = new Date(now);
@@ -2161,12 +2288,10 @@
                 let monthRevenue = 0;
                 const recentTransactions = [];
                 
-                snapshot.forEach(doc => {
-                    const booking = doc.data();
-                    
-                    // Only count completed/confirmed bookings for revenue
+                // Process each unique booking
+                allBookings.forEach(booking => {
                     if (['confirmed', 'completed'].includes(booking.status)) {
-                        const amount = parseFloat(booking.totalAmount || booking.amount || 0);
+                        const amount = booking.calculatedAmount || 0;
                         const bookingDate = booking.createdAt ? 
                             (booking.createdAt.toDate ? booking.createdAt.toDate() : new Date(booking.createdAt)) : 
                             new Date();
@@ -2193,16 +2318,16 @@
                         // Add to recent transactions
                         recentTransactions.push({
                             ...booking,
-                            id: doc.id,
-                            date: bookingDate
+                            date: bookingDate,
+                            amount: amount
                         });
                     }
                 });
                 
                 // Update report cards
-                document.getElementById('todayRevenue').textContent = `$${todayRevenue.toFixed(2)}`;
-                document.getElementById('weekRevenue').textContent = `$${weekRevenue.toFixed(2)}`;
-                document.getElementById('monthRevenue').textContent = `$${monthRevenue.toFixed(2)}`;
+                document.getElementById('todayRevenue').textContent = `₹${todayRevenue.toFixed(2)}`;
+                document.getElementById('weekRevenue').textContent = `₹${weekRevenue.toFixed(2)}`;
+                document.getElementById('monthRevenue').textContent = `₹${monthRevenue.toFixed(2)}`;
                 
                 // Sort recent transactions by date
                 recentTransactions.sort((a, b) => b.date - a.date);
@@ -2234,8 +2359,8 @@
                     row.innerHTML = `
                         <td>TXN-${String(index + 1).padStart(4, '0')}</td>
                         <td>${formattedDate}</td>
-                        <td>${booking.userName || 'User'}</td>
-                        <td>$${(booking.totalAmount || booking.amount || 0).toFixed(2)}</td>
+                        <td>${booking.userName || booking.userEmail || booking.userId || 'User'}</td>
+                        <td>₹${(booking.amount || 0).toFixed(2)}</td>
                         <td><span class="badge badge-success">Completed</span></td>
                     `;
                     transactionsTableBody.appendChild(row);
@@ -2252,30 +2377,34 @@
             try {
                 // Update from local data
                 totalStations.textContent = stationsData.length;
-                activeBookings.textContent = bookingsData.filter(b => 
+                
+                // Count active bookings from map (guaranteed unique)
+                const activeCount = Array.from(bookingsMap.values()).filter(b => 
                     ['pending', 'confirmed', 'active'].includes(b.status)).length;
+                activeBookings.textContent = activeCount;
+                
                 totalUsers.textContent = usersData.length;
                 
-                // Calculate total revenue
-                const totalRev = bookingsData.reduce((sum, booking) => {
-                    return sum + parseFloat(booking.totalAmount || booking.amount || 0);
-                }, 0);
+                // Calculate total revenue from unique bookings
+                let totalRev = 0;
+                bookingsMap.forEach(booking => {
+                    totalRev += (booking.calculatedAmount || 0);
+                });
                 
-                totalRevenue.textContent = `$${totalRev.toFixed(2)}`;
+                totalRevenue.textContent = `₹${totalRev.toFixed(2)}`;
                 
             } catch (error) {
                 console.error('Error updating stats:', error);
             }
         }
 
-        // Delete Station (global function)
+        // Delete Station
         window.deleteStation = async function(stationId) {
             if (!confirm('Are you sure you want to delete this station?')) {
                 return;
             }
 
             try {
-                // Soft delete - mark as inactive
                 await db.collection('stations').doc(stationId).update({
                     isActive: false,
                     deletedAt: new Date().toISOString()
@@ -2289,7 +2418,7 @@
             }
         };
 
-        // Edit Station (global function)
+        // Edit Station
         window.editStation = async function(stationId) {
             try {
                 const doc = await db.collection('stations').doc(stationId).get();
@@ -2326,7 +2455,7 @@
             }
         };
 
-        // Setup Real-time Listeners
+        // Setup Real-time Listeners - SIMPLIFIED
         function setupRealTimeListeners() {
             try {
                 console.log('Setting up real-time listeners...');
@@ -2334,36 +2463,21 @@
                 // Listen for stations changes
                 db.collection('stations').onSnapshot(async (snapshot) => {
                     console.log('Stations updated:', snapshot.size);
-                    
-                    // Load stations again when data changes
                     loadStations();
                     loadStationsForSlotInfo();
-                    updateStats();
-                }, (error) => {
-                    console.error('Stations listener error:', error);
                 });
-
-                // Listen for bookings changes
+                
+                // Listen for bookings changes - simplified
                 db.collection('bookings').onSnapshot((snapshot) => {
-                    console.log('Bookings updated:', snapshot.size);
-                    
-                    // Load bookings again when data changes
+                    console.log('Bookings real-time update detected');
+                    // Just reload bookings completely to ensure no duplicates
                     loadBookings();
-                    updateStats();
-                    
-                    // If reports section is active, reload it
-                    if (!document.getElementById('reports').classList.contains('hidden')) {
-                        loadReports();
-                    }
                 });
-
+                
                 // Listen for users changes
                 db.collection('users').onSnapshot((snapshot) => {
                     console.log('Users updated:', snapshot.size);
-                    
-                    // Load users again when data changes
                     loadUsers();
-                    updateStats();
                 });
 
             } catch (error) {
@@ -2378,7 +2492,7 @@
             // Load initial data
             Promise.all([
                 loadStations(),
-                loadBookings(),
+                loadBookings(),  // This will load with the new duplicate-proof system
                 loadUsers(),
                 loadReports(),
                 loadStationsForSlotInfo()
